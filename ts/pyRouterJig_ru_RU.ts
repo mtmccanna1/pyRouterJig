@@ -372,6 +372,11 @@
         <translation>Ширина доски</translation>
     </message>
     <message>
+        <location filename="../qt_driver.py" line="485"/>
+        <source>Tail Board Thickness{}</source>
+        <translation>Толщина хвостовой доски</translation>
+    </message>
+    <message>
         <location filename="../qt_driver.py" line="444"/>
         <source>Bit Diam.{}</source>
         <translation>Диаметр фрезы</translation>
@@ -671,6 +676,17 @@ Are you sure you want to do this?</source>
         <translation>Угол фрезы </translation>
     </message>
     <message>
+        <location filename="../qt_driver.py" line="1247"/>
+        <location filename="../qt_config.py" line="874"/>
+        <source>Tail Board Thickness</source>
+        <translation>Толщина хвостовой доски</translation>
+    </message>
+    <message>
+        <location filename="../qt_driver.py" line="1140"/>
+        <source>Changed tail board thickness to </source>
+        <translation>Толщина хвостовой доски </translation>
+    </message>
+    <message>
         <location filename="../qt_driver.py" line="1144"/>
         <source>Changed board width to </source>
         <translation>Ширина доски </translation>
@@ -957,6 +973,11 @@ Center: </source>
         <translation>Недопустимая толщина проставки {}&lt;p&gt;Укажите неотрицательное значение, например {}</translation>
     </message>
     <message>
+        <location filename="../qt_utils.py" line="75"/>
+        <source>Unable to set {} to: {}&lt;p&gt;Set to a positive value.</source>
+        <translation>Невозможно присвоить {0} значение {1}&lt;p&gt;Введите положительное число.</translation>
+    </message>
+    <message>
         <location filename="../router.py" line="580"/>
         <source>cut xmin = %d, xmax = %d: Must have xmax &gt; xmin!</source>
         <translation>Проблемный рез  xmin = %d, xmax = %d: Обязательно чтобы xmax &gt; xmin!</translation>
@@ -1175,6 +1196,16 @@ Center: </source>
         <location filename="../qt_config.py" line="226"/>
         <source>The initial board width when pyRouterJig starts.</source>
         <translation>Ширина доски при старте pyRouterJig.</translation>
+    </message>
+    <message>
+        <location filename="../qt_config.py" line="288"/>
+        <source>Initial Tail Board Thickness{}:</source>
+        <translation>Толщина хвостовой доски по умолчанию {}:</translation>
+    </message>
+    <message>
+        <location filename="../qt_config.py" line="293"/>
+        <source>The initial tail-board thickness when pyRouterJig starts.</source>
+        <translation>Толщина хвостовой доски при запуске pyRouterJig.</translation>
     </message>
     <message>
         <location filename="../qt_config.py" line="230"/>
@@ -1550,6 +1581,11 @@ Center: </source>
         <location filename="../doc.py" line="59"/>
         <source>&lt;b&gt;Board Width&lt;/b&gt; is the board width (in%s) of             the joint.</source>
         <translation>&lt;b&gt;Ширина доски&lt;/b&gt;ширина доски (в %s) задает размер соединения.</translation>
+    </message>
+    <message>
+        <location filename="../doc.py" line="64"/>
+        <source>&lt;b&gt;Tail Board Thickness&lt;/b&gt; is the thickness (in%s) of the tail board.</source>
+        <translation>&lt;b&gt;Толщина хвостовой доски&lt;/b&gt; Толщина хвостовой доски (в %s).</translation>
     </message>
     <message>
         <location filename="../doc.py" line="62"/>

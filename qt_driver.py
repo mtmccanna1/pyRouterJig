@@ -69,6 +69,11 @@ class Driver(QtWidgets.QMainWindow):
         (self.config, msg) = self.load_config(app)
         if not hasattr(self.config, 'show_template'):
             self.config.show_template = False
+        if not hasattr(self.config, 'tail_board_thickness'):
+            if self.config.metric:
+                self.config.tail_board_thickness = 19
+            else:
+                self.config.tail_board_thickness = '3/4'
 
         # Form the units
         self.units = utils.Units(self.config.english_separator, self.config.metric,
@@ -85,6 +90,7 @@ class Driver(QtWidgets.QMainWindow):
         self.bit = router.Router_Bit(self.units, bit_width, bit_depth, bit_angle, bit_gentle)
         self.boards = []
         board_width = self.units.abstract_to_increments(self.config.board_width)
+        self.tail_board_thickness = self.units.abstract_to_increments(self.config.tail_board_thickness)
         for _ in lrange(4):
             self.boards.append(router.Board(self.bit, width=board_width))
         self.boards[2].set_active(False)
@@ -474,6 +480,16 @@ class Driver(QtWidgets.QMainWindow):
         self.le_board_width.editingFinished.connect(self._on_board_width)
         self.le_board_width.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
 
+        # Tail board thickness line edit
+        self.le_tail_thickness_label = QtWidgets.QLabel(
+            self.transl.tr('Tail Board Thickness{}').format(us))
+        self.le_tail_thickness = QtWidgets.QLineEdit(self.main_frame)
+        self.le_tail_thickness.setFixedWidth(lineEditWidth)
+        self.le_tail_thickness.setText(
+            self.units.increments_to_string(self.tail_board_thickness))
+        self.le_tail_thickness.editingFinished.connect(self._on_tail_board_thickness)
+        self.le_tail_thickness.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+
         # Bit diameter line edit
         self.le_bit_width_label = QtWidgets.QLabel(self.transl.tr('Bit Diam.{}').format(us))
         self.le_bit_width = QtWidgets.QLineEdit(self.main_frame)
@@ -698,7 +714,7 @@ class Driver(QtWidgets.QMainWindow):
         # this grid contains all the lower-left input stuff
         grid = QtWidgets.QGridLayout()
 
-        grid.addWidget(qt_utils.create_hline(), 0, 0, 2, 9, QtCore.Qt.AlignTop)
+        grid.addWidget(qt_utils.create_hline(), 0, 0, 2, 11, QtCore.Qt.AlignTop)
         grid.addWidget(qt_utils.create_vline(), 0, 0, 9, 1)
 
         # Add the board width label, board width input line edit,
@@ -707,22 +723,27 @@ class Driver(QtWidgets.QMainWindow):
         grid.addWidget(self.le_board_width, 2, 1)
         grid.addWidget(qt_utils.create_vline(), 0, 2, 9, 1)
 
-        # Add the bit diameter label and its line edit
-        grid.addWidget(self.le_bit_width_label, 1, 3)
-        grid.addWidget(self.le_bit_width, 2, 3)
+        # Add the tail board thickness label and its line edit
+        grid.addWidget(self.le_tail_thickness_label, 1, 3)
+        grid.addWidget(self.le_tail_thickness, 2, 3)
         grid.addWidget(qt_utils.create_vline(), 0, 4, 9, 1)
 
-        # Add the bit depth label and its line edit
-        grid.addWidget(self.le_bit_depth_label, 1, 5)
-        grid.addWidget(self.le_bit_depth, 2, 5)
+        # Add the bit diameter label and its line edit
+        grid.addWidget(self.le_bit_width_label, 1, 5)
+        grid.addWidget(self.le_bit_width, 2, 5)
         grid.addWidget(qt_utils.create_vline(), 0, 6, 9, 1)
 
-        # Add the bit angle label and its line edit
-        grid.addWidget(self.le_bit_angle_label, 1, 7)
-        grid.addWidget(self.le_bit_angle, 2, 7)
+        # Add the bit depth label and its line edit
+        grid.addWidget(self.le_bit_depth_label, 1, 7)
+        grid.addWidget(self.le_bit_depth, 2, 7)
         grid.addWidget(qt_utils.create_vline(), 0, 8, 9, 1)
 
-        grid.addWidget(qt_utils.create_hline(), 3, 0, 2, 9, QtCore.Qt.AlignTop)
+        # Add the bit angle label and its line edit
+        grid.addWidget(self.le_bit_angle_label, 1, 9)
+        grid.addWidget(self.le_bit_angle, 2, 9)
+        grid.addWidget(qt_utils.create_vline(), 0, 10, 9, 1)
+
+        grid.addWidget(qt_utils.create_hline(), 3, 0, 2, 11, QtCore.Qt.AlignTop)
 
         grid.setRowStretch(2, 10)
 
@@ -742,7 +763,7 @@ class Driver(QtWidgets.QMainWindow):
         grid.addWidget(self.le_boardm[0], 7, 5)
         grid.addWidget(self.le_boardm[1], 7, 7)
 
-        grid.addWidget(qt_utils.create_hline(), 8, 0, 2, 9, QtCore.Qt.AlignTop)
+        grid.addWidget(qt_utils.create_hline(), 8, 0, 2, 11, QtCore.Qt.AlignTop)
 
         hbox.addLayout(grid)
 
@@ -905,6 +926,8 @@ class Driver(QtWidgets.QMainWindow):
 
         self.le_board_width_label.setToolTip(self.doc.board_width() + disable)
         self.le_board_width.setToolTip(self.doc.board_width() + disable)
+        self.le_tail_thickness_label.setToolTip(self.doc.tail_board_thickness() + disable)
+        self.le_tail_thickness.setToolTip(self.doc.tail_board_thickness() + disable)
         self.le_bit_width_label.setToolTip(self.doc.bit_width() + disable)
         self.le_bit_width.setToolTip(self.doc.bit_width() + disable)
         self.le_bit_depth_label.setToolTip(self.doc.bit_depth() + disable)
@@ -1057,6 +1080,7 @@ class Driver(QtWidgets.QMainWindow):
         '''
         # enable/disable changing parameters, depending upon spacing algorithm
         les = [self.le_board_width, self.le_board_width_label,
+               self.le_tail_thickness, self.le_tail_thickness_label,
                self.le_bit_width, self.le_bit_width_label,
                self.le_bit_depth, self.le_bit_depth_label,
                self.le_bit_angle, self.le_bit_angle_label]
@@ -1212,6 +1236,20 @@ class Driver(QtWidgets.QMainWindow):
             self.status_message(self.transl.tr('Changed bit angle to ') + val)
             self.file_saved = False
             self.threeDS_enabler()
+
+    @QtCore.pyqtSlot()
+    def _on_tail_board_thickness(self):
+        '''Handles changes to tail board thickness'''
+        if self.config.debug:
+            print('_on_tail_board_thickness')
+        result = qt_utils.set_units_line_edit(
+            self.le_tail_thickness, self.units, self.tail_board_thickness,
+            self.transl.tr('Tail Board Thickness'))
+        if result is not None:
+            self.tail_board_thickness, val = result
+            self.config.tail_board_thickness = val
+            self.status_message(self.transl.tr('Changed tail board thickness to ') + val)
+            self.file_saved = False
 
     @QtCore.pyqtSlot()
     def _on_board_width(self):
@@ -1565,6 +1603,8 @@ class Driver(QtWidgets.QMainWindow):
 
         # ... set line edit parameters
         self.le_board_width.setText(self.units.increments_to_string(self.boards[0].width))
+        self.le_tail_thickness.setText(
+            self.units.increments_to_string(self.tail_board_thickness))
         self.le_bit_width.setText(self.units.increments_to_string(self.bit.width))
         self.le_bit_depth.setText(self.units.increments_to_string(self.bit.depth))
         self.le_bit_angle.setText(str(self.bit.angle))

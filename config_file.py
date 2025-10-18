@@ -105,6 +105,9 @@ show_template = {show_template}
 # Initial board width [inches|mm]
 board_width = {board_width}
 
+# Initial tail board thickness [inches|mm]
+tail_board_thickness = {tail_board_thickness}
+
 # Initial bit diam. [inches|mm]
 bit_width = {bit_width}
 
@@ -255,6 +258,7 @@ COMMON_VALS = {'version': 'NONE',
 ENGLISH_VALS = {'metric': False,
                 'num_increments': 32,
                 'board_width': '7 1/2',
+                'tail_board_thickness': '3/4',
                 'bit_width': '1/2',
                 'bit_depth': 0.75,
                 'double_board_thickness': '1/8',
@@ -272,6 +276,7 @@ ENGLISH_VALS = {'metric': False,
 METRIC_VALS = {'metric': True,
                'num_increments': 1,
                'board_width': 200,
+               'tail_board_thickness': 19,
                'bit_width': 12,
                'bit_depth': 12,
                'double_board_thickness': 4,
@@ -309,6 +314,7 @@ MIGRATE = ['english_separator',  # COMMON_VALS
            'board_fill_colors',
            'num_increments',  # METRIC_VALS or ENGLISH_VALS
            'board_width',
+           'tail_board_thickness',
            'bit_width',
            'bit_depth',
            'double_board_thickness',
@@ -322,6 +328,7 @@ MIGRATE = ['english_separator',  # COMMON_VALS
 # Values that have either metric or English dimensions
 DIM_VALS = ['separation',
             'board_width',
+            'tail_board_thickness',
             'bit_angle',
             'bit_width',
             'bit_depth',
@@ -362,7 +369,7 @@ class Configuration(object):
         # config file must be updated if it was created with an earlier number.
         # Update this value when new parameters are added to the config file,
         # or any parameter's type changes,
-        self.create_version_number = 95
+        self.create_version_number = 96
         # config file cannot be migrated from versions earlier than this.
         # This value is currently set at the version that all dimensions and bit_angle
         # were consistent types and dimensions.

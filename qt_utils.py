@@ -63,6 +63,31 @@ def set_router_value(line_edit, obj, attr, setter, is_float=False, bit=None):
         return None
 
 
+def set_units_line_edit(line_edit, units, original_value, label, allow_zero=False):
+    '''
+    Validates and applies a units-based value entered into a QLineEdit.
+    '''
+    if not line_edit.isModified():
+        return None
+    line_edit.setModified(False)
+    text = str(line_edit.text())
+    min_allowed = 0 if allow_zero else 1
+    msg = units.transl.tr('Unable to set {} to: {}<p>Set to a positive value.').format(label, text)
+    try:
+        value = units.string_to_increments(text)
+    except Exception:
+        QtWidgets.QMessageBox.warning(line_edit.parentWidget(), 'Error', msg)
+        line_edit.setText(units.increments_to_string(original_value))
+        return None
+    if value < 0 or (not allow_zero and value == 0):
+        QtWidgets.QMessageBox.warning(line_edit.parentWidget(), 'Error', msg)
+        line_edit.setText(units.increments_to_string(original_value))
+        return None
+    formatted = units.increments_to_string(value)
+    line_edit.setText(formatted)
+    return (value, formatted)
+
+
 class PreviewComboBox(QtWidgets.QComboBox):
     '''
     This comboxbox emits "activated" when hidePopup is called.  This allows

@@ -143,6 +143,13 @@ class Config_Window(QtWidgets.QDialog):
         if 'show_template' not in self.new_config:
             self.new_config['show_template'] = getattr(self.config, 'show_template', False)
             setattr(self.config, 'show_template', self.new_config['show_template'])
+        if 'tail_board_thickness' not in self.new_config:
+            if self.config.metric:
+                default_tail = 19
+            else:
+                default_tail = '3/4'
+            self.new_config['tail_board_thickness'] = default_tail
+            setattr(self.config, 'tail_board_thickness', default_tail)
         self.line_edit_width = 80
         self.units = units
         self.transl = units.transl
@@ -155,6 +162,8 @@ class Config_Window(QtWidgets.QDialog):
         self.bit = router.Router_Bit(self.units, bit_width, bit_depth, bit_angle, bit_gentle)
         board_width = self.units.abstract_to_increments(self.config.board_width)
         self.board = router.Board(self.bit, width=board_width)
+        self.tail_board_thickness = self.units.abstract_to_increments(
+            self.config.tail_board_thickness)
 
         # Form the tabs and their contents
         title_label = QtWidgets.QLabel(
@@ -274,6 +283,15 @@ class Config_Window(QtWidgets.QDialog):
         self.le_board_width.editingFinished.connect(self._on_board_width)
         tt = self.transl.tr('The initial board width when pyRouterJig starts.')
         grid = form_line(self.le_board_width_label, self.le_board_width, tt)
+        vbox.addLayout(grid)
+
+        self.le_tail_thickness_label = QtWidgets.QLabel(
+            self.transl.tr('Initial Tail Board Thickness{}:').format(us))
+        self.le_tail_thickness = QtWidgets.QLineEdit(w)
+        self.le_tail_thickness.setFixedWidth(self.line_edit_width)
+        self.le_tail_thickness.editingFinished.connect(self._on_tail_thickness)
+        tt = self.transl.tr('The initial tail-board thickness when pyRouterJig starts.')
+        grid = form_line(self.le_tail_thickness_label, self.le_tail_thickness, tt)
         vbox.addLayout(grid)
 
         self.le_db_thick_label = QtWidgets.QLabel(
@@ -647,6 +665,7 @@ class Config_Window(QtWidgets.QDialog):
         self.le_min_image.setText(str(self.config.min_image_width))
         self.le_max_image.setText(str(self.config.max_image_width))
         self.le_board_width.setText(str(self.config.board_width))
+        self.le_tail_thickness.setText(str(self.config.tail_board_thickness))
         self.le_db_thick.setText(str(self.config.double_board_thickness))
         self.le_bit_width.setText(str(self.config.bit_width))
         self.le_bit_depth.setText(str(self.config.bit_depth))
@@ -842,6 +861,21 @@ class Config_Window(QtWidgets.QDialog):
         if val is not None:
             self.new_config['board_width'] = val
             self.update_state('board_width')
+
+    @QtCore.pyqtSlot()
+    def _on_tail_thickness(self):
+        '''
+        Handles change in tail board thickness
+        '''
+        if self.config.debug:
+            print('qt_config:_on_tail_thickness')
+        result = qt_utils.set_units_line_edit(
+            self.le_tail_thickness, self.units, self.tail_board_thickness,
+            self.transl.tr('Tail Board Thickness'))
+        if result is not None:
+            self.tail_board_thickness, val = result
+            self.new_config['tail_board_thickness'] = val
+            self.update_state('tail_board_thickness')
 
     @QtCore.pyqtSlot()
     def _on_db_thick(self):
