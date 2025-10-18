@@ -369,7 +369,8 @@ class Qt_Fig(QtWidgets.QWidget):
 
         # draw the objects
         self.draw_boards(painter)
-        self.draw_template(painter)
+        if getattr(self.config, 'show_template', False):
+            self.draw_template(painter)
         self.draw_title(painter)
         # self.draw_finger_sizes(painter)
         if self.config.show_finger_widths:

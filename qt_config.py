@@ -140,6 +140,9 @@ class Config_Window(QtWidgets.QDialog):
         QtWidgets.QDialog.__init__(self, parent)
         self.config = config
         self.new_config = self.config.__dict__.copy()
+        if 'show_template' not in self.new_config:
+            self.new_config['show_template'] = getattr(self.config, 'show_template', False)
+            setattr(self.config, 'show_template', self.new_config['show_template'])
         self.line_edit_width = 80
         self.units = units
         self.transl = units.transl
@@ -486,6 +489,11 @@ class Config_Window(QtWidgets.QDialog):
         w = QtWidgets.QWidget()
         vbox = QtWidgets.QVBoxLayout()
 
+        self.cb_show_template = QtWidgets.QCheckBox(self.transl.tr('Show Template'), w)
+        self.cb_show_template.stateChanged.connect(self._on_show_template)
+        self.cb_show_template.setToolTip(self.transl.tr('Display the Incra template outline'))
+        vbox.addWidget(self.cb_show_template)
+
         self.cb_show_caul = QtWidgets.QCheckBox(self.transl.tr('Show Caul Template'), w)
         self.cb_show_caul.stateChanged.connect(self._on_show_caul)
         self.cb_show_caul.setToolTip(self.transl.tr('Display the template for clamping cauls'))
@@ -629,6 +637,7 @@ class Config_Window(QtWidgets.QDialog):
         self.le_num_incr.setText(str(self.config.num_increments))
         self.le_wood_images.setText(str(self.config.wood_images))
         self.cb_show_finger_widths.setChecked(self.config.show_finger_widths)
+        self.cb_show_template.setChecked(getattr(self.config, 'show_template', False))
         self.cb_show_caul.setChecked(self.config.show_caul)
         self.cb_show_fit.setChecked(self.config.show_fit)
         self.cb_rpid.setChecked(self.config.show_router_pass_identifiers)
@@ -891,6 +900,16 @@ class Config_Window(QtWidgets.QDialog):
             print('qt_config:_on_show_finger_widths')
         self.new_config['show_finger_widths'] = self.cb_show_finger_widths.isChecked()
         self.update_state('show_finger_widths')
+
+    @QtCore.pyqtSlot()
+    def _on_show_template(self):
+        '''
+        Handles change in showing the template
+        '''
+        if self.config.debug:
+            print('qt_config:_on_show_template')
+        self.new_config['show_template'] = self.cb_show_template.isChecked()
+        self.update_state('show_template')
 
     @QtCore.pyqtSlot()
     def _on_show_caul(self):

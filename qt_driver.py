@@ -67,6 +67,8 @@ class Driver(QtWidgets.QMainWindow):
         # Read the config file.  We wait until the end of this init to print
         # the status message, because we need the statusbar to be created first.
         (self.config, msg) = self.load_config(app)
+        if not hasattr(self.config, 'show_template'):
+            self.config.show_template = False
 
         # Form the units
         self.units = utils.Units(self.config.english_separator, self.config.metric,
@@ -304,6 +306,12 @@ class Driver(QtWidgets.QMainWindow):
         self.caul_action.triggered.connect(self._on_caul)
         view_menu.addAction(self.caul_action)
         self.caul_action.setChecked(self.config.show_caul)
+
+        self.template_action = QtWidgets.QAction(self.transl.tr('Template'), self, checkable=True)
+        self.template_action.setStatusTip(self.transl.tr('Toggle template display'))
+        self.template_action.triggered.connect(self._on_template)
+        view_menu.addAction(self.template_action)
+        self.template_action.setChecked(getattr(self.config, 'show_template', False))
 
         self.finger_size_action = QtWidgets.QAction(self.transl.tr('Finger Widths'),
                                                     self, checkable=True)
@@ -1671,12 +1679,14 @@ class Driver(QtWidgets.QMainWindow):
         # Update widgets that may have changed
         actions = [self.finger_size_action,
                    self.caul_action,
+                   self.template_action,
                    self.pass_id_action,
                    self.pass_location_action]
         for a in actions:
             a.blockSignals(True)
         self.finger_size_action.setChecked(self.config.show_finger_widths)
         self.caul_action.setChecked(self.config.show_caul)
+        self.template_action.setChecked(getattr(self.config, 'show_template', False))
         self.fit_action.setChecked(self.config.show_fit)
         self.pass_id_action.setChecked(self.config.show_router_pass_identifiers)
         self.pass_location_action.setChecked(self.config.show_router_pass_locations)
@@ -1984,6 +1994,19 @@ class Driver(QtWidgets.QMainWindow):
             self.status_message(self.transl.tr('Turned on caul template.'))
         else:
             self.status_message(self.transl.tr('Turned off caul template.'))
+        self.file_saved = False
+        self.draw()
+
+    @QtCore.pyqtSlot()
+    def _on_template(self):
+        '''Handles toggling showing Incra template'''
+        self.config.show_template = self.template_action.isChecked()
+        if self.config_window is not None:
+            self.config_window.update_state('show_template')
+        if self.config.show_template:
+            self.status_message(self.transl.tr('Turned on template view.'))
+        else:
+            self.status_message(self.transl.tr('Turned off template view.'))
         self.file_saved = False
         self.draw()
 

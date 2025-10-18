@@ -98,6 +98,10 @@ show_caul = {show_caul}
 # off under the menu "View" and selecting "Fit"
 show_fit = {show_fit}
 
+# If true, then show the Incra template in the diagram.  This option may also be
+# turned on and off under the menu "View" and selecting "Template"
+show_template = {show_template}
+
 # Initial board width [inches|mm]
 board_width = {board_width}
 
@@ -226,6 +230,7 @@ COMMON_VALS = {'version': 'NONE',
                'show_router_pass_locations': False,
                'show_caul': False,
                'show_fit': False,
+               'show_template': False,
                'bit_gentle': 33.0,
                'bit_angle': 0,
                'min_image_width': 1440,
@@ -289,6 +294,7 @@ MIGRATE = ['english_separator',  # COMMON_VALS
            'show_router_passes',
            'show_caul',
            'show_fit',
+           'show_template',
            'bit_angle',
            'min_image_width',
            'max_image_width',
@@ -356,7 +362,7 @@ class Configuration(object):
         # config file must be updated if it was created with an earlier number.
         # Update this value when new parameters are added to the config file,
         # or any parameter's type changes,
-        self.create_version_number = 94
+        self.create_version_number = 95
         # config file cannot be migrated from versions earlier than this.
         # This value is currently set at the version that all dimensions and bit_angle
         # were consistent types and dimensions.
