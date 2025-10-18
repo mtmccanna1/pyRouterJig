@@ -369,8 +369,8 @@ class Qt_Fig(QtWidgets.QWidget):
 
         # draw the objects
         self.draw_boards(painter)
-        if getattr(self.config, 'show_template', False):
-            self.draw_template(painter)
+        show_template = getattr(self.config, 'show_template', False)
+        self.draw_template(painter, draw_surface=show_template)
         self.draw_title(painter)
         # self.draw_finger_sizes(painter)
         if self.config.show_finger_widths:
@@ -534,9 +534,12 @@ class Qt_Fig(QtWidgets.QWidget):
             paint_text(painter, self.description, (x, y), flags)
             painter.restore()
 
-    def draw_template(self, painter):
+    def draw_template(self, painter, draw_surface=True):
         '''
-        Draws the Incra templates
+        Draws the Incra templates.
+
+        draw_surface toggles rendering of the template bodies while keeping
+        router pass indicators available for reference.
         '''
         rect_T = self.geom.rect_T
         board_T = self.geom.board_T
@@ -557,12 +560,14 @@ class Qt_Fig(QtWidgets.QWidget):
         penB.setWidthF(0)
 
         painter.setPen(pen_canvas)
-        self.draw_template_rectangle(painter, rect_T, board_T)
+        if draw_surface:
+            self.draw_template_rectangle(painter, rect_T, board_T)
 
         if boards[3].active:
             rect_TDD = self.geom.rect_TDD
             board_TDD = self.geom.board_TDD
-            self.draw_template_rectangle(painter, rect_TDD, board_TDD)
+            if draw_surface:
+                self.draw_template_rectangle(painter, rect_TDD, board_TDD)
             rect_top = rect_TDD
         else:
             rect_top = rect_T
@@ -680,7 +685,8 @@ class Qt_Fig(QtWidgets.QWidget):
             board_caul = self.geom.board_caul
             top = self.geom.caul_top
             bottom = self.geom.caul_bottom
-            self.draw_template_rectangle(painter, rect_caul, board_caul)
+            if draw_surface:
+                self.draw_template_rectangle(painter, rect_caul, board_caul)
             centerline_caul = []
             painter.setPen(penA)
             pm = self.draw_passes(painter, 'A', top, rect_caul.yMid(), rect_caul.yT(), flagsR, xMid)
@@ -729,7 +735,8 @@ class Qt_Fig(QtWidgets.QWidget):
                        flagsLC, (5, 0))
             paint_text(painter, label_top, (rect_TDD.xR(), rect_TDD.yMid()), flagsRC, (-5, 0))
 
-        self.draw_alignment(painter)
+        if draw_surface:
+            self.draw_alignment(painter)
 
     def draw_one_board(self, painter, board, bit, fill_color):
         '''
