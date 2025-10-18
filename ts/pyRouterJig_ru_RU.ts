@@ -916,21 +916,44 @@ Are you sure you want to do this?</source>
         <translation>Статус:</translation>
     </message>
     <message>
-        <location filename="../qt_fig.py" line="688"/>
-        <source>Cauls</source>
-        <translation>Прорезка</translation>
+        <location filename="../qt_fig.py" line="564"/>
+        <source>Back Fence Setting</source>
+        <translation>Настройка заднего упора</translation>
     </message>
     <message>
-        <location filename="../qt_fig.py" line="716"/>
-        <source>
-Center: </source>
-        <translation>
-Центр: </translation>
+        <location filename="../qt_fig.py" line="565"/>
+        <source>Spacing Between Stops</source>
+        <translation>Интервал между упорами</translation>
     </message>
     <message>
-        <location filename="../qt_fig.py" line="780"/>
-        <source>boards</source>
-        <translation>доски</translation>
+        <location filename="../qt_fig.py" line="566"/>
+        <source>Template Panel Position</source>
+        <translation>Положение панели шаблона</translation>
+    </message>
+    <message>
+        <location filename="../qt_fig.py" line="567"/>
+        <source>Rabbet Cut Setting</source>
+        <translation>Настройка выборки четверти</translation>
+    </message>
+    <message>
+        <location filename="../qt_fig.py" line="568"/>
+        <source>Dovetail Cut Setting</source>
+        <translation>Настройка ласточкиного хвоста</translation>
+    </message>
+    <message>
+        <location filename="../qt_fig.py" line="588"/>
+        <source>Label</source>
+        <translation>Параметр</translation>
+    </message>
+    <message>
+        <location filename="../qt_fig.py" line="589"/>
+        <source>Decimal</source>
+        <translation>Десятичное</translation>
+    </message>
+    <message>
+        <location filename="../qt_fig.py" line="590"/>
+        <source>Fraction</source>
+        <translation>Дробное</translation>
     </message>
     <message>
         <location filename="../router.py" line="121"/>

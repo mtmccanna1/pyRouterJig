@@ -24,7 +24,6 @@ Contains the Qt functionality for drawing the template and boards.
 from __future__ import print_function
 from __future__ import division
 
-import time
 from decimal import Decimal
 
 from future.utils import lrange
@@ -369,8 +368,8 @@ class Qt_Fig(QtWidgets.QWidget):
 
         # draw the objects
         self.draw_boards(painter)
-        show_template = getattr(self.config, 'show_template', False)
-        self.draw_template(painter, draw_surface=show_template)
+        self.draw_router_pass_overlays(painter)
+        self.draw_results_table(painter)
         self.draw_title(painter)
         # self.draw_finger_sizes(painter)
         if self.config.show_finger_widths:
@@ -475,278 +474,137 @@ class Qt_Fig(QtWidgets.QWidget):
             painter.restore()
         return passMid
 
-    def draw_alignment(self, painter):
+    def draw_router_pass_overlays(self, painter):
         '''
-        Draws the alignment lines on all templates
+        Draws router pass labels and guides on the boards when enabled.
         '''
-        board_T = self.geom.board_T
-        board_TDD = self.geom.board_TDD
-        board_caul = self.geom.board_caul
+        if not (self.config.show_router_pass_identifiers or
+                self.config.show_router_pass_locations):
+            return
 
-        # draw the alignment lines on both templates
-        x = board_T.xR() + self.geom.bit.width // 2
+        boards = self.geom.boards
+        xMid = self.geom.board_T.xMid()
+        frac_depth = 0.95 * self.geom.bit.depth
+        sep_over_2 = 0.5 * self.geom.margins.sep
 
         pen = QtGui.QPen(QtCore.Qt.SolidLine)
-        pen.setColor(self.colors['template_margin_foreground'])
+        pen.setColor(self.colors['canvas_foreground'])
         pen.setWidthF(0)
-
-        bg_pen = QtGui.QPen(QtCore.Qt.SolidLine)
-        bg_pen.setColor(QtGui.QColor('White'))
-        bg_pen.setWidthF(0)
-
-        self.set_font_size(painter, 'template')
-        label = 'ALIGN'
-        flags = QtCore.Qt.AlignTop | QtCore.Qt.AlignHCenter
-        for b in [board_T, board_TDD, board_caul]:
-            if b is not None:
-                y1 = b.yB()
-                y2 = b.yT()
-                painter.setPen(pen)
-                painter.drawLine(x, y1, x, y2)
-                paint_text(painter, label, (x, (y1 + y2) // 2), flags, (0, 0), -90)
-                painter.setPen(bg_pen)
-                painter.drawLine(QtCore.QPointF(x-0.5, y1+0.5), QtCore.QPointF(x-0.5, y2-0.5))
-                painter.drawLine(QtCore.QPointF(x+0.5, y1+0.5), QtCore.QPointF(x+0.5, y2-0.5))
-
-    def draw_template_rectangle(self, painter, r, b):
-        '''
-        Draws the geometry of a template
-        '''
-        # Fill the entire template as white
-        painter.fillRect(r.xL(), r.yB(), r.width, r.height, QtCore.Qt.white)
-
-        # Fill the template margins with a grayshade
-        brush = QtGui.QBrush(QtGui.QColor(self.colors['template_margin_background']))
-        painter.fillRect(r.xL(), r.yB(), b.xL() - r.xL(), r.height, brush)
-        painter.fillRect(b.xR(), r.yB(), r.xR() - b.xR(), r.height, brush)
-
-        # Draw the template bounding box
-        painter.drawRect(r.xL(), r.yB(), r.width, r.height)
-
-        # Label the template with a watermark
-        if self.description is not None:
-            painter.save()
-            self.set_font_size(painter, 'watermark')
-            painter.setPen(self.colors['watermark_color'])
-            flags = QtCore.Qt.AlignVCenter | QtCore.Qt.AlignHCenter
-            x = r.xL() + r.width // 2
-            y = r.yB() + r.height // 2
-            paint_text(painter, self.description, (x, y), flags)
-            painter.restore()
-
-    def draw_template(self, painter, draw_surface=True):
-        '''
-        Draws the Incra templates.
-
-        draw_surface toggles rendering of the template bodies while keeping
-        router pass indicators available for reference.
-        '''
-        rect_T = self.geom.rect_T
-        board_T = self.geom.board_T
-        boards = self.geom.boards
-
-        xMid = board_T.xMid()
-        if draw_surface:
-            centerline = []
-            centerline_TDD = []
-        else:
-            centerline = None
-            centerline_TDD = None
-
-        pen_canvas = QtGui.QPen(QtCore.Qt.SolidLine)
-        pen_canvas.setColor(self.colors['canvas_foreground'])
-        pen_canvas.setWidthF(0)
-        penA = QtGui.QPen(QtCore.Qt.SolidLine)
-        penA.setColor(self.colors['pass_color'])
-        penA.setWidthF(0)
-        penB = QtGui.QPen(QtCore.Qt.DashLine)
-        penB.setColor(self.colors['pass_alt_color'])
-        penB.setWidthF(0)
-
-        painter.setPen(pen_canvas)
-        if draw_surface:
-            self.draw_template_rectangle(painter, rect_T, board_T)
-
-        if boards[3].active:
-            rect_TDD = self.geom.rect_TDD
-            board_TDD = self.geom.board_TDD
-            if draw_surface:
-                self.draw_template_rectangle(painter, rect_TDD, board_TDD)
-            rect_top = rect_TDD
-        else:
-            rect_top = rect_T
+        painter.save()
+        painter.setPen(pen)
 
         flagsL = QtCore.Qt.AlignLeft
         flagsR = QtCore.Qt.AlignRight
-        show_passes = self.config.show_router_pass_identifiers |\
-                      self.config.show_router_pass_locations
 
-        frac_depth = 0.95 * self.geom.bit.depth
-        sepOver2 = 0.5 * self.geom.margins.sep
-        # Draw the router passes
-        # ... do the top board passes
-        y1 = boards[0].yB() - sepOver2
-        y2 = boards[0].yB() + frac_depth
-        if draw_surface:
-            painter.setPen(penA)
-            pm = self.draw_passes(painter, 'A', boards[0].bottom_cuts, rect_top.yMid(),
-                                  rect_top.yT(), flagsR, xMid)
-            if pm is not None:
-                if boards[3].active:
-                    centerline_TDD.append(pm)
-                else:
-                    centerline.append(pm)
-        if show_passes:
-            painter.setPen(pen_canvas)
+        # Top board passes
+        if boards[0].active:
+            y1 = boards[0].yB() - sep_over_2
+            y2 = boards[0].yB() + frac_depth
             self.draw_passes(painter, 'A', boards[0].bottom_cuts, y1, y2,
                              flagsL, xMid, False)
-        label_bottom = 'A,B'
-        label_top = None
+
         i = 0
-        # Do double-double passes
+        # Double-double passes
         if boards[3].active:
-            y1 = boards[3].yT() + sepOver2
+            y1 = boards[3].yT() + sep_over_2
             y2 = boards[3].yT() - frac_depth
-            if draw_surface:
-                painter.setPen(penB)
-                pm = self.draw_passes(painter, self.labels[i], boards[3].top_cuts, rect_TDD.yMid(),
-                                      rect_TDD.yT(), flagsR, xMid)
-                if pm is not None:
-                    centerline_TDD.append(pm)
-            if show_passes:
-                painter.setPen(pen_canvas)
-                self.draw_passes(painter, self.labels[i], boards[3].top_cuts, y1, y2,
-                                 flagsR, xMid, False)
+            self.draw_passes(painter, self.labels[i], boards[3].top_cuts, y1, y2,
+                             flagsR, xMid, False)
 
-            y1 = boards[3].yB() - sepOver2
+            y1 = boards[3].yB() - sep_over_2
             y2 = boards[3].yB() + frac_depth
-            if draw_surface:
-                painter.setPen(penA)
-                pm = self.draw_passes(painter, self.labels[i + 1], boards[3].bottom_cuts,
-                                      rect_TDD.yMid(), rect_TDD.yB(), flagsL, xMid)
-                if pm is not None:
-                    centerline_TDD.append(pm)
-            if show_passes:
-                painter.setPen(pen_canvas)
-                self.draw_passes(painter, self.labels[i + 1], boards[3].bottom_cuts, y1, y2,
-                                 flagsL, xMid, False)
-            label_bottom = 'D,E,F'
-            label_top = 'A,B,C'
-            i += 2
-        # Do double passes
-        if boards[2].active:
-            y1 = boards[2].yT() + sepOver2
-            y2 = boards[2].yT() - frac_depth
-            if draw_surface:
-                if boards[3].active:
-                    painter.setPen(penA)
-                else:
-                    painter.setPen(penB)
-                pm = self.draw_passes(painter, self.labels[i], boards[2].top_cuts, rect_T.yMid(),
-                                      rect_T.yT(), flagsR, xMid)
-                if pm is not None:
-                    centerline.append(pm)
-            if show_passes:
-                painter.setPen(pen_canvas)
-                self.draw_passes(painter, self.labels[i], boards[2].top_cuts, y1, y2,
-                                 flagsR, xMid, False)
-            y1 = boards[2].yB() - sepOver2
-            y2 = boards[2].yB() + frac_depth
-            if draw_surface:
-                painter.setPen(penA)
-                pm = self.draw_passes(painter, self.labels[i + 1], boards[2].bottom_cuts, rect_T.yMid(),
-                                      rect_T.yB(), flagsL, xMid)
-                if pm is not None:
-                    centerline.append(pm)
-            if show_passes:
-                painter.setPen(pen_canvas)
-                self.draw_passes(painter, self.labels[i + 1], boards[2].bottom_cuts, y1, y2,
-                                 flagsL, xMid, False)
-            if not boards[3].active:
-                label_bottom = 'A,B,C,D'
+            self.draw_passes(painter, self.labels[i + 1], boards[3].bottom_cuts, y1, y2,
+                             flagsL, xMid, False)
             i += 2
 
-        # ... do the bottom board passes
-        y1 = boards[1].yT() + sepOver2
-        y2 = boards[1].yT() - frac_depth
-        if draw_surface:
-            if boards[2].active or boards[3].active:
-                painter.setPen(penB)
-            else:
-                painter.setPen(penA)
-            pm = self.draw_passes(painter, self.labels[i], boards[1].top_cuts, rect_T.yMid(),
-                                  rect_T.yB(), flagsL, xMid)
-            if pm is not None:
-                centerline.append(pm)
-        if show_passes:
-            painter.setPen(pen_canvas)
+        # Double passes
+        if boards[2].active:
+            y1 = boards[2].yT() + sep_over_2
+            y2 = boards[2].yT() - frac_depth
+            self.draw_passes(painter, self.labels[i], boards[2].top_cuts, y1, y2,
+                             flagsR, xMid, False)
+
+            y1 = boards[2].yB() - sep_over_2
+            y2 = boards[2].yB() + frac_depth
+            self.draw_passes(painter, self.labels[i + 1], boards[2].bottom_cuts, y1, y2,
+                             flagsL, xMid, False)
+            i += 2
+
+        # Bottom board passes
+        if boards[1].active:
+            y1 = boards[1].yT() + sep_over_2
+            y2 = boards[1].yT() - frac_depth
             self.draw_passes(painter, self.labels[i], boards[1].top_cuts, y1, y2,
                              flagsR, xMid, False)
 
-        flagsLC = QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
-        flagsRC = QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
+        painter.restore()
 
-        # ... draw the caul template and do its passes.  Draw events may be
-        # triggered before we have the ability to recreate the geom object,
-        # so we have to ensure the caul_top object actually exists.
-        datetime = time.strftime('\n%d %b %y %H:%M', time.localtime())
-        if draw_surface and self.config.show_caul and self.geom.caul_top is not None:
-            rect_caul = self.geom.rect_caul
-            board_caul = self.geom.board_caul
-            top = self.geom.caul_top
-            bottom = self.geom.caul_bottom
-            self.draw_template_rectangle(painter, rect_caul, board_caul)
-            centerline_caul = []
-            painter.setPen(penA)
-            pm = self.draw_passes(painter, 'A', top, rect_caul.yMid(), rect_caul.yT(), flagsR, xMid)
-            if pm is not None:
-                centerline_caul.append(pm)
-            pm = self.draw_passes(painter, self.labels[i], bottom, rect_caul.yMid(),
-                                  rect_caul.yB(), flagsL, xMid)
-            if pm is not None:
-                centerline_caul.append(pm)
-            self.set_font_size(painter, 'template_labels')
-            label = self.transl.tr('Cauls')
-            if centerline_caul:
-                label += self.transl.tr('\nCenter: ') + centerline_caul[0]
-            else:
-                pen = QtGui.QPen(QtCore.Qt.DashLine)
-                pen.setColor(self.colors['center_color'])
-                pen.setWidthF(0)
-                painter.setPen(pen)
-                painter.drawLine(xMid, rect_caul.yB(), xMid, rect_caul.yT())
-            painter.setPen(self.colors['template_margin_foreground'])
-            paint_text(painter, label + datetime, (rect_caul.xL(), rect_caul.yMid()),
-                       flagsLC, (5, 0))
-            paint_text(painter, label, (rect_caul.xR(), rect_caul.yMid()), flagsRC, (-5, 0))
+    def draw_results_table(self, painter):
+        '''
+        Renders the placeholder for the cut results table in place of the template.
+        '''
+        rect_T = getattr(self.geom, 'rect_T', None)
+        if rect_T is None:
+            return
 
-        # Label the templates
-        pen = QtGui.QPen(QtCore.Qt.DashLine)
-        pen.setColor(self.colors['center_color'])
+        if getattr(self.config, 'show_template', False):
+            # Honor the existing toggle by allowing the table area to be hidden.
+            return
+
+        painter.save()
+        background = QtGui.QColor(self.colors['canvas_background'])
+        painter.fillRect(rect_T.xL(), rect_T.yB(), rect_T.width, rect_T.height, background)
+
+        pen = QtGui.QPen(QtCore.Qt.SolidLine)
+        pen.setColor(self.colors['canvas_foreground'])
         pen.setWidthF(0)
-        self.set_font_size(painter, 'template_labels')
-        if draw_surface and centerline:
-            label_bottom += self.transl.tr('\nCenter: ') + centerline[0]
-        else:
-            if draw_surface:
-                painter.setPen(pen)
-                painter.drawLine(xMid, rect_T.yB(), xMid, rect_T.yT())
-        if draw_surface:
-            painter.setPen(self.colors['template_margin_foreground'])
-            paint_text(painter, label_bottom + datetime, (rect_T.xL(), rect_T.yMid()), flagsLC, (5, 0))
-            paint_text(painter, label_bottom, (rect_T.xR(), rect_T.yMid()), flagsRC, (-5, 0))
-            if label_top is not None:
-                if centerline_TDD:
-                    label_top += self.transl.tr('\nCenter: ') + centerline_TDD[0]
-                else:
-                    painter.setPen(pen)
-                    painter.drawLine(xMid, rect_TDD.yB(), xMid, rect_TDD.yT())
-                painter.setPen(self.colors['template_margin_foreground'])
-                paint_text(painter, label_top + datetime, (rect_TDD.xL(), rect_TDD.yMid()),
-                           flagsLC, (5, 0))
-                paint_text(painter, label_top, (rect_TDD.xR(), rect_TDD.yMid()), flagsRC, (-5, 0))
+        painter.setPen(pen)
 
-            self.draw_alignment(painter)
+        row_labels = [
+            self.transl.tr('Back Fence Setting'),
+            self.transl.tr('Spacing Between Stops'),
+            self.transl.tr('Template Panel Position'),
+            self.transl.tr('Rabbet Cut Setting'),
+            self.transl.tr('Dovetail Cut Setting'),
+        ]
+        num_rows = len(row_labels)
+        num_cols = 3
+
+        row_height = float(rect_T.height) / num_rows if num_rows else rect_T.height
+        col_width = float(rect_T.width) / num_cols if num_cols else rect_T.width
+
+        # Draw the grid
+        for r in range(num_rows + 1):
+            y = rect_T.yB() + r * row_height
+            painter.drawLine(rect_T.xL(), y, rect_T.xR(), y)
+        for c in range(num_cols + 1):
+            x = rect_T.xL() + c * col_width
+            painter.drawLine(x, rect_T.yB(), x, rect_T.yT())
+
+        self.set_font_size(painter, 'template')
+
+        headers = [
+            self.transl.tr('Label'),
+            self.transl.tr('Decimal'),
+            self.transl.tr('Fraction'),
+        ]
+        header_y = rect_T.yT() + max(self.margins.sep * 0.2, 2)
+        for idx, header in enumerate(headers):
+            x = rect_T.xL() + (idx + 0.5) * col_width
+            paint_text(painter, header, (x, header_y),
+                       QtCore.Qt.AlignHCenter | QtCore.Qt.AlignBottom, (0, -2))
+
+        dash = '—'
+        for idx, label in enumerate(row_labels):
+            y = rect_T.yB() + (idx + 0.5) * row_height
+            paint_text(painter, label, (rect_T.xL(), y),
+                       QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, (5, 0))
+            paint_text(painter, dash, (rect_T.xL() + 1 * col_width + col_width / 2, y),
+                       QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+            paint_text(painter, dash, (rect_T.xL() + 2 * col_width + col_width / 2, y),
+                       QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+
+        painter.restore()
 
     def draw_one_board(self, painter, board, bit, fill_color):
         '''
@@ -941,9 +799,11 @@ class Qt_Fig(QtWidgets.QWidget):
         self.set_font_size(painter, 'title')
         painter.setPen(self.colors['canvas_foreground'])
         title = router.create_title(self.geom.boards, self.geom.bit, self.geom.spacing)
-        flags = QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop
-        p = (self.geom.board_T.xMid(), self.margins.bottom)
-        paint_text(painter, title, p, flags, (0, 5))
+        flags = QtCore.Qt.AlignHCenter | QtCore.Qt.AlignBottom
+        top_y = max(b.yT() for b in self.geom.boards if b.active)
+        spacing = max(self.margins.sep, 4)
+        p = (self.geom.board_T.xMid(), top_y + spacing)
+        paint_text(painter, title, p, flags, (0, -5))
 
     def draw_finger_sizes(self, painter):
         '''
