@@ -546,8 +546,12 @@ class Qt_Fig(QtWidgets.QWidget):
         boards = self.geom.boards
 
         xMid = board_T.xMid()
-        centerline = []
-        centerline_TDD = []
+        if draw_surface:
+            centerline = []
+            centerline_TDD = []
+        else:
+            centerline = None
+            centerline_TDD = None
 
         pen_canvas = QtGui.QPen(QtCore.Qt.SolidLine)
         pen_canvas.setColor(self.colors['canvas_foreground'])
@@ -583,14 +587,15 @@ class Qt_Fig(QtWidgets.QWidget):
         # ... do the top board passes
         y1 = boards[0].yB() - sepOver2
         y2 = boards[0].yB() + frac_depth
-        painter.setPen(penA)
-        pm = self.draw_passes(painter, 'A', boards[0].bottom_cuts, rect_top.yMid(),
-                              rect_top.yT(), flagsR, xMid)
-        if pm is not None:
-            if boards[3].active:
-                centerline_TDD.append(pm)
-            else:
-                centerline.append(pm)
+        if draw_surface:
+            painter.setPen(penA)
+            pm = self.draw_passes(painter, 'A', boards[0].bottom_cuts, rect_top.yMid(),
+                                  rect_top.yT(), flagsR, xMid)
+            if pm is not None:
+                if boards[3].active:
+                    centerline_TDD.append(pm)
+                else:
+                    centerline.append(pm)
         if show_passes:
             painter.setPen(pen_canvas)
             self.draw_passes(painter, 'A', boards[0].bottom_cuts, y1, y2,
@@ -602,11 +607,12 @@ class Qt_Fig(QtWidgets.QWidget):
         if boards[3].active:
             y1 = boards[3].yT() + sepOver2
             y2 = boards[3].yT() - frac_depth
-            painter.setPen(penB)
-            pm = self.draw_passes(painter, self.labels[i], boards[3].top_cuts, rect_TDD.yMid(),
-                                  rect_TDD.yT(), flagsR, xMid)
-            if pm is not None:
-                centerline_TDD.append(pm)
+            if draw_surface:
+                painter.setPen(penB)
+                pm = self.draw_passes(painter, self.labels[i], boards[3].top_cuts, rect_TDD.yMid(),
+                                      rect_TDD.yT(), flagsR, xMid)
+                if pm is not None:
+                    centerline_TDD.append(pm)
             if show_passes:
                 painter.setPen(pen_canvas)
                 self.draw_passes(painter, self.labels[i], boards[3].top_cuts, y1, y2,
@@ -614,11 +620,12 @@ class Qt_Fig(QtWidgets.QWidget):
 
             y1 = boards[3].yB() - sepOver2
             y2 = boards[3].yB() + frac_depth
-            painter.setPen(penA)
-            pm = self.draw_passes(painter, self.labels[i + 1], boards[3].bottom_cuts,
-                                  rect_TDD.yMid(), rect_TDD.yB(), flagsL, xMid)
-            if pm is not None:
-                centerline_TDD.append(pm)
+            if draw_surface:
+                painter.setPen(penA)
+                pm = self.draw_passes(painter, self.labels[i + 1], boards[3].bottom_cuts,
+                                      rect_TDD.yMid(), rect_TDD.yB(), flagsL, xMid)
+                if pm is not None:
+                    centerline_TDD.append(pm)
             if show_passes:
                 painter.setPen(pen_canvas)
                 self.draw_passes(painter, self.labels[i + 1], boards[3].bottom_cuts, y1, y2,
@@ -630,25 +637,27 @@ class Qt_Fig(QtWidgets.QWidget):
         if boards[2].active:
             y1 = boards[2].yT() + sepOver2
             y2 = boards[2].yT() - frac_depth
-            if boards[3].active:
-                painter.setPen(penA)
-            else:
-                painter.setPen(penB)
-            pm = self.draw_passes(painter, self.labels[i], boards[2].top_cuts, rect_T.yMid(),
-                                  rect_T.yT(), flagsR, xMid)
-            if pm is not None:
-                centerline.append(pm)
+            if draw_surface:
+                if boards[3].active:
+                    painter.setPen(penA)
+                else:
+                    painter.setPen(penB)
+                pm = self.draw_passes(painter, self.labels[i], boards[2].top_cuts, rect_T.yMid(),
+                                      rect_T.yT(), flagsR, xMid)
+                if pm is not None:
+                    centerline.append(pm)
             if show_passes:
                 painter.setPen(pen_canvas)
                 self.draw_passes(painter, self.labels[i], boards[2].top_cuts, y1, y2,
                                  flagsR, xMid, False)
             y1 = boards[2].yB() - sepOver2
             y2 = boards[2].yB() + frac_depth
-            painter.setPen(penA)
-            pm = self.draw_passes(painter, self.labels[i + 1], boards[2].bottom_cuts, rect_T.yMid(),
-                                  rect_T.yB(), flagsL, xMid)
-            if pm is not None:
-                centerline.append(pm)
+            if draw_surface:
+                painter.setPen(penA)
+                pm = self.draw_passes(painter, self.labels[i + 1], boards[2].bottom_cuts, rect_T.yMid(),
+                                      rect_T.yB(), flagsL, xMid)
+                if pm is not None:
+                    centerline.append(pm)
             if show_passes:
                 painter.setPen(pen_canvas)
                 self.draw_passes(painter, self.labels[i + 1], boards[2].bottom_cuts, y1, y2,
@@ -660,14 +669,15 @@ class Qt_Fig(QtWidgets.QWidget):
         # ... do the bottom board passes
         y1 = boards[1].yT() + sepOver2
         y2 = boards[1].yT() - frac_depth
-        if boards[2].active or boards[3].active:
-            painter.setPen(penB)
-        else:
-            painter.setPen(penA)
-        pm = self.draw_passes(painter, self.labels[i], boards[1].top_cuts, rect_T.yMid(),
-                              rect_T.yB(), flagsL, xMid)
-        if pm is not None:
-            centerline.append(pm)
+        if draw_surface:
+            if boards[2].active or boards[3].active:
+                painter.setPen(penB)
+            else:
+                painter.setPen(penA)
+            pm = self.draw_passes(painter, self.labels[i], boards[1].top_cuts, rect_T.yMid(),
+                                  rect_T.yB(), flagsL, xMid)
+            if pm is not None:
+                centerline.append(pm)
         if show_passes:
             painter.setPen(pen_canvas)
             self.draw_passes(painter, self.labels[i], boards[1].top_cuts, y1, y2,
@@ -680,13 +690,12 @@ class Qt_Fig(QtWidgets.QWidget):
         # triggered before we have the ability to recreate the geom object,
         # so we have to ensure the caul_top object actually exists.
         datetime = time.strftime('\n%d %b %y %H:%M', time.localtime())
-        if self.config.show_caul and self.geom.caul_top is not None:
+        if draw_surface and self.config.show_caul and self.geom.caul_top is not None:
             rect_caul = self.geom.rect_caul
             board_caul = self.geom.board_caul
             top = self.geom.caul_top
             bottom = self.geom.caul_bottom
-            if draw_surface:
-                self.draw_template_rectangle(painter, rect_caul, board_caul)
+            self.draw_template_rectangle(painter, rect_caul, board_caul)
             centerline_caul = []
             painter.setPen(penA)
             pm = self.draw_passes(painter, 'A', top, rect_caul.yMid(), rect_caul.yT(), flagsR, xMid)
@@ -716,26 +725,27 @@ class Qt_Fig(QtWidgets.QWidget):
         pen.setColor(self.colors['center_color'])
         pen.setWidthF(0)
         self.set_font_size(painter, 'template_labels')
-        if centerline:
+        if draw_surface and centerline:
             label_bottom += self.transl.tr('\nCenter: ') + centerline[0]
         else:
-            painter.setPen(pen)
-            painter.drawLine(xMid, rect_T.yB(), xMid, rect_T.yT())
-        painter.setPen(self.colors['template_margin_foreground'])
-        paint_text(painter, label_bottom + datetime, (rect_T.xL(), rect_T.yMid()), flagsLC, (5, 0))
-        paint_text(painter, label_bottom, (rect_T.xR(), rect_T.yMid()), flagsRC, (-5, 0))
-        if label_top is not None:
-            if centerline_TDD:
-                label_top += self.transl.tr('\nCenter: ') + centerline_TDD[0]
-            else:
+            if draw_surface:
                 painter.setPen(pen)
-                painter.drawLine(xMid, rect_TDD.yB(), xMid, rect_TDD.yT())
-            painter.setPen(self.colors['template_margin_foreground'])
-            paint_text(painter, label_top + datetime, (rect_TDD.xL(), rect_TDD.yMid()),
-                       flagsLC, (5, 0))
-            paint_text(painter, label_top, (rect_TDD.xR(), rect_TDD.yMid()), flagsRC, (-5, 0))
-
+                painter.drawLine(xMid, rect_T.yB(), xMid, rect_T.yT())
         if draw_surface:
+            painter.setPen(self.colors['template_margin_foreground'])
+            paint_text(painter, label_bottom + datetime, (rect_T.xL(), rect_T.yMid()), flagsLC, (5, 0))
+            paint_text(painter, label_bottom, (rect_T.xR(), rect_T.yMid()), flagsRC, (-5, 0))
+            if label_top is not None:
+                if centerline_TDD:
+                    label_top += self.transl.tr('\nCenter: ') + centerline_TDD[0]
+                else:
+                    painter.setPen(pen)
+                    painter.drawLine(xMid, rect_TDD.yB(), xMid, rect_TDD.yT())
+                painter.setPen(self.colors['template_margin_foreground'])
+                paint_text(painter, label_top + datetime, (rect_TDD.xL(), rect_TDD.yMid()),
+                           flagsLC, (5, 0))
+                paint_text(painter, label_top, (rect_TDD.xR(), rect_TDD.yMid()), flagsRC, (-5, 0))
+
             self.draw_alignment(painter)
 
     def draw_one_board(self, painter, board, bit, fill_color):
