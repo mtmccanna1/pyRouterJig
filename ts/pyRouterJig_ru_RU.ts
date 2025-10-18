@@ -373,7 +373,7 @@
     </message>
     <message>
         <location filename="../qt_driver.py" line="444"/>
-        <source>Bit Width{}</source>
+        <source>Bit Diam.{}</source>
         <translation>Диаметр фрезы</translation>
     </message>
     <message>
@@ -657,8 +657,8 @@ Are you sure you want to do this?</source>
     </message>
     <message>
         <location filename="../qt_driver.py" line="1100"/>
-        <source>Changed bit width to </source>
-        <translation>Ширина фрезы </translation>
+        <source>Changed bit diam. to </source>
+        <translation>Диаметр фрезы </translation>
     </message>
     <message>
         <location filename="../qt_driver.py" line="1115"/>
@@ -923,12 +923,12 @@ Center: </source>
     </message>
     <message>
         <location filename="../router.py" line="141"/>
-        <source>Unable to set Bit Width to: {}&lt;p&gt;Set to a positive value, such as: {}</source>
+        <source>Unable to set Bit Diam. to: {}&lt;p&gt;Set to a positive value, such as: {}</source>
         <translation>Недопустивый диаметр фрезы {}&lt;p&gt;Укажите положительное значение, например {}</translation>
     </message>
     <message>
         <location filename="../router.py" line="157"/>
-        <source>&lt;p&gt;Stright Bit Width must be an even number of increments.&lt;p&gt;The increment size is: {}&lt;p&gt;</source>
+        <source>&lt;p&gt;Stright Bit Diam. must be an even number of increments.&lt;p&gt;The increment size is: {}&lt;p&gt;</source>
         <translation>&lt;p&gt;Диаметр прямых фрез должен быть четен относительно {}&lt;p&gt;Дюймовые размеры в метрической системе не работают для прямых фрез&lt;p&gt;</translation>
     </message>
     <message>
@@ -943,7 +943,7 @@ Center: </source>
     </message>
     <message>
         <location filename="../router.py" line="193"/>
-        <source>Unable to set Bit Angle to: 0&lt;p&gt;Change Bit Width to odd value first &lt;p&gt;than drop angle to 0 to get stright bit</source>
+        <source>Unable to set Bit Angle to: 0&lt;p&gt;Change Bit Diam. to odd value first &lt;p&gt;than drop angle to 0 to get stright bit</source>
         <translation>Прямая фреза должна иметь четный диаметр. Вначале укажите допустимый диаметр&lt;p&gt;, затем сбросте величину угла в 0</translation>
     </message>
     <message>
@@ -973,12 +973,12 @@ Center: </source>
     </message>
     <message>
         <location filename="../router.py" line="590"/>
-        <source>cut xmin = %f, xmax = %f ): Bit width (%f) delta too large for this cut!</source>
+        <source>cut xmin = %f, xmax = %f ): Bit diam. (%f) delta too large for this cut!</source>
         <translation>Проблемный рез  xmin = %f, xmax = %f ): Диаметр фрезы (%f) слишком велик для реза!</translation>
     </message>
     <message>
         <location filename="../router.py" line="646"/>
-        <source>cut xmin = %f, xmax = %f, pass = %f: Bit width (%f) too large for this cut!</source>
+        <source>cut xmin = %f, xmax = %f, pass = %f: Bit diam. (%f) too large for this cut!</source>
         <translation>Проблемный рез xmin = %f, xmax = %f, проход = %f: Диаметр врезы (%f) слишком велик для точного реза!</translation>
     </message>
     <message>
@@ -1208,12 +1208,12 @@ Center: </source>
     </message>
     <message>
         <location filename="../qt_config.py" line="274"/>
-        <source>Initial Bit Width{}:</source>
+        <source>Initial Bit Diam.{}:</source>
         <translation>Диаметр фрезы по умолчанию {}:</translation>
     </message>
     <message>
         <location filename="../qt_config.py" line="278"/>
-        <source>The initial bit width when pyRouterJig starts.</source>
+        <source>The initial bit diam. when pyRouterJig starts.</source>
         <translation>Диаметр фрезы при старте pyRouterJig.</translation>
     </message>
     <message>
@@ -1553,7 +1553,7 @@ Center: </source>
     </message>
     <message>
         <location filename="../doc.py" line="62"/>
-        <source>&lt;b&gt;Bit Width&lt;/b&gt; is the maximum cutting width (in%s) of             the router bit.</source>
+        <source>&lt;b&gt;Bit Diam.&lt;/b&gt; is the maximum cutting width (in%s) of             the router bit.</source>
         <translation>&lt;b&gt;Диаметр фрезы&lt;/b&gt; Диаметр фрезы определяет  минимальный возможный размер реза (в %s).</translation>
     </message>
     <message>
@@ -1628,7 +1628,7 @@ Center: </source>
     </message>
     <message>
         <location filename="../spacing.py" line="226"/>
-        <source>Unable to compute a equally-spaced joint for the board and bit parameters specified.  This is likely because the board width is too small for the bit width specified.</source>
+        <source>Unable to compute a equally-spaced joint for the board and bit parameters specified.  This is likely because the board width is too small for the bit diam. specified.</source>
         <translation>Невозможно спроектировать соединение с равноразмерными шипами. Скорее всего ширина доски слишком мала для заданного диаметра фрезы.</translation>
     </message>
     <message>
@@ -1675,7 +1675,7 @@ Board width: </source>
     </message>
     <message>
         <location filename="../spacing.py" line="259"/>
-        <source>Unable to compute a variable-spaced joint for the board and bit parameters specified.  This is likely because the board width is too small for the bit width specified.</source>
+        <source>Unable to compute a variable-spaced joint for the board and bit parameters specified.  This is likely because the board width is too small for the bit diam. specified.</source>
         <translation>Невозможно расчитать соединение с переменными шипами для заданной ширины доски и диаметра биты. Скорее всего ширина дозки узка для выбранной фрезы.</translation>
     </message>
     <message>

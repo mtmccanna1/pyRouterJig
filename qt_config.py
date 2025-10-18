@@ -322,11 +322,11 @@ class Config_Window(QtWidgets.QDialog):
 
         us = self.units.units_string(withParens=True)
         self.le_bit_width_label = QtWidgets.QLabel(
-            self.transl.tr('Initial Bit Width{}:').format(us))
+            self.transl.tr('Initial Bit Diam.{}:').format(us))
         self.le_bit_width = QtWidgets.QLineEdit(w)
         self.le_bit_width.setFixedWidth(self.line_edit_width)
         self.le_bit_width.editingFinished.connect(self._on_bit_width)
-        tt = self.transl.tr('The initial bit width when pyRouterJig starts.')
+        tt = self.transl.tr('The initial bit diam. when pyRouterJig starts.')
         grid = form_line(self.le_bit_width_label, self.le_bit_width, tt)
         vbox.addLayout(grid)
 
@@ -794,7 +794,7 @@ class Config_Window(QtWidgets.QDialog):
     @QtCore.pyqtSlot()
     def _on_bit_width(self):
         '''
-        Handles change in bit width
+        Handles change in bit diameter
         '''
         if self.config.debug:
             print('qt_config:_on_bit_width')

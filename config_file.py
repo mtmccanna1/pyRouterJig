@@ -105,7 +105,7 @@ show_template = {show_template}
 # Initial board width [inches|mm]
 board_width = {board_width}
 
-# Initial bit width [inches|mm]
+# Initial bit diam. [inches|mm]
 bit_width = {bit_width}
 
 # Initial bit depth [inches|mm] 

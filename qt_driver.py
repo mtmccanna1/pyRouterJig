@@ -474,8 +474,8 @@ class Driver(QtWidgets.QMainWindow):
         self.le_board_width.editingFinished.connect(self._on_board_width)
         self.le_board_width.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
 
-        # Bit width line edit
-        self.le_bit_width_label = QtWidgets.QLabel(self.transl.tr('Bit Width{}').format(us))
+        # Bit diameter line edit
+        self.le_bit_width_label = QtWidgets.QLabel(self.transl.tr('Bit Diam.{}').format(us))
         self.le_bit_width = QtWidgets.QLineEdit(self.main_frame)
         self.le_bit_width.setFixedWidth(lineEditWidth)
         self.le_bit_width.setText(self.units.increments_to_string(self.bit.width))
@@ -707,7 +707,7 @@ class Driver(QtWidgets.QMainWindow):
         grid.addWidget(self.le_board_width, 2, 1)
         grid.addWidget(qt_utils.create_vline(), 0, 2, 9, 1)
 
-        # Add the bit width label and its line edit
+        # Add the bit diameter label and its line edit
         grid.addWidget(self.le_bit_width_label, 1, 3)
         grid.addWidget(self.le_bit_width, 2, 3)
         grid.addWidget(qt_utils.create_vline(), 0, 4, 9, 1)
@@ -1173,7 +1173,7 @@ class Driver(QtWidgets.QMainWindow):
 
     @QtCore.pyqtSlot()
     def _on_bit_width(self):
-        '''Handles changes to bit width'''
+        '''Handles changes to bit diameter'''
         if self.config.debug:
             print('_on_bit_width')
         val = qt_utils.set_router_value(self.le_bit_width, self.bit, 'width',
@@ -1181,7 +1181,7 @@ class Driver(QtWidgets.QMainWindow):
         if val is not None:
             self.reinit_spacing()
             self.draw()
-            self.status_message(self.transl.tr('Changed bit width to ') + val)
+            self.status_message(self.transl.tr('Changed bit diam. to ') + val)
             self.file_saved = False
 
     @QtCore.pyqtSlot()
