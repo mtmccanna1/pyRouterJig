@@ -941,6 +941,16 @@ Are you sure you want to do this?</source>
         <translation>Настройка ласточкиного хвоста</translation>
     </message>
     <message>
+        <location filename="../qt_fig.py" line="612"/>
+        <source>Bit Height Options: {}</source>
+        <translation>Варианты высоты фрезы: {}</translation>
+    </message>
+    <message>
+        <location filename="../qt_fig.py" line="613"/>
+        <source>{} or {}</source>
+        <translation>{} или {}</translation>
+    </message>
+    <message>
         <location filename="../qt_fig.py" line="588"/>
         <source>Label</source>
         <translation>Параметр</translation>

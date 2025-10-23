@@ -24,7 +24,9 @@ Contains the Qt functionality for drawing the template and boards.
 from __future__ import print_function
 from __future__ import division
 
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
+
+import math
 
 from future.utils import lrange
 from PyQt5 import QtCore, QtGui, QtWidgets, QtPrintSupport
@@ -111,6 +113,15 @@ class Qt_Fig(QtWidgets.QWidget):
                           'boards': 4,
                           'template_labels': 3,
                           'watermark': 4}
+        self.fraction_glyphs = {
+            (1, 2): '\u00BD',
+            (1, 4): '\u00BC',
+            (3, 4): '\u00BE',
+            (1, 8): '\u215B',
+            (3, 8): '\u215C',
+            (5, 8): '\u215D',
+            (7, 8): '\u215E',
+        }
         self.transform = None
         self.base_transform = None
         self.mouse_pos = None
@@ -214,6 +225,79 @@ class Qt_Fig(QtWidgets.QWidget):
                 self.colors[c].setRed(g)
                 self.colors[c].setGreen(g)
                 self.colors[c].setBlue(g)
+
+    def _format_inches_sixteenth(self, value):
+        '''
+        Format a measurement rounded to the nearest 1/16" as a display string.
+        '''
+        if value is None:
+            return None
+
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return None
+
+        if not math.isfinite(numeric):
+            return None
+
+        decimal_value = Decimal(str(numeric))
+        scaled = (decimal_value * Decimal('16')).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+        numerator = int(scaled)
+        denominator = 16
+
+        if numerator < 0:
+            return None
+
+        whole = numerator // denominator
+        remainder = numerator % denominator
+
+        if remainder:
+            gcd = math.gcd(remainder, denominator)
+            num = remainder // gcd
+            den = denominator // gcd
+            frac = self.fraction_glyphs.get((num, den))
+            if frac is None:
+                frac = f'{num}\u2044{den}'
+            if whole:
+                text = f'{whole} {frac}'
+            else:
+                text = frac
+        else:
+            text = str(whole)
+
+        if not text:
+            text = '0'
+
+        return text + '\u2033'
+
+    def _bit_height_options(self):
+        '''
+        Calculate the bit height options derived from the bit angle.
+        '''
+        if self.geom is None or getattr(self.geom, 'bit', None) is None:
+            return None
+
+        try:
+            angle = float(self.geom.bit.angle)
+        except (TypeError, ValueError):
+            return None
+
+        if angle <= 0:
+            return None
+
+        tan_value = math.tan(math.radians(angle))
+        if tan_value <= 0:
+            return None
+
+        base_height = 0.03125 / tan_value
+        option_one = self._format_inches_sixteenth(base_height)
+        option_two = self._format_inches_sixteenth(base_height * 2)
+
+        if option_one and option_two:
+            return (option_one, option_two)
+
+        return None
 
     def draw(self, template, boards, bit, spacing, woods, description):
         '''
@@ -629,6 +713,17 @@ class Qt_Fig(QtWidgets.QWidget):
                        QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
             paint_text(painter, dash, (table_left + 2 * col_width + col_width / 2, y),
                        QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+
+        options = self._bit_height_options()
+        if options:
+            options_body = self.transl.tr('{} or {}').format(options[0], options[1])
+        else:
+            options_body = '—'
+
+        options_text = self.transl.tr('Bit Height Options: {}').format(options_body)
+        text_y = rect_T.yB() - max(self.margins.sep * 0.4, 12)
+        paint_text(painter, options_text, (rect_T.xMid(), text_y),
+                   QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
 
         painter.restore()
 
