@@ -796,14 +796,27 @@ class Qt_Fig(QtWidgets.QWidget):
         Draws the title
         '''
 
+        boards = [b for b in self.geom.boards if b.active]
+        if not boards:
+            return
+
         self.set_font_size(painter, 'title')
         painter.setPen(self.colors['canvas_foreground'])
         title = router.create_title(self.geom.boards, self.geom.bit, self.geom.spacing)
+
+        top_y = max(b.yT() for b in boards)
+        top_limit = self.fig_height - self.margins.top
+        headroom = max(0, top_limit - top_y)
+        desired_padding = max(self.margins.sep, 4)
+        baseline_offset = min(headroom, desired_padding)
+        if headroom <= 0:
+            baseline = top_limit
+        else:
+            baseline = top_y + baseline_offset
+
         flags = QtCore.Qt.AlignHCenter | QtCore.Qt.AlignBottom
-        top_y = max(b.yT() for b in self.geom.boards if b.active)
-        spacing = max(self.margins.sep, 4)
-        p = (self.geom.board_T.xMid(), top_y + spacing)
-        paint_text(painter, title, p, flags, (0, -5))
+        anchor = (self.geom.board_T.xMid(), baseline)
+        paint_text(painter, title, anchor, flags, (0, -5))
 
     def draw_finger_sizes(self, painter):
         '''
