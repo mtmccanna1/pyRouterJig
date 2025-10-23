@@ -24,7 +24,7 @@ Contains the Qt functionality for drawing the template and boards.
 from __future__ import print_function
 from __future__ import division
 
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 
 import math
 
@@ -298,6 +298,113 @@ class Qt_Fig(QtWidgets.QWidget):
             return (option_one, option_two)
 
         return None
+
+    def _format_decimal_measurement(self, increments, units=None):
+        '''
+        Format a measurement expressed in increments as a decimal string with units.
+        '''
+        if increments is None:
+            return None
+
+        if units is None:
+            if self.geom is None or getattr(self.geom, 'bit', None) is None:
+                return None
+            units = self.geom.bit.units
+
+        try:
+            increments_value = Decimal(increments)
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+        if units.metric:
+            if not units.num_increments:
+                return None
+            value = (increments_value / Decimal(units.num_increments))\
+                .quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            text = format(value, 'f')
+            suffix = units.units_string()
+            return f'{text}{suffix}' if suffix else text
+
+        if not units.increments_per_inch:
+            return None
+
+        value = (increments_value / Decimal(units.increments_per_inch))\
+            .quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)
+        text = format(value, 'f')
+        return text + '\u2033'
+
+    def _collect_pass_positions(self, cuts):
+        '''
+        Gather router pass positions from the provided cuts, ordered right to left.
+        '''
+        positions = []
+        if not cuts:
+            return positions
+
+        for cut in cuts[::-1]:
+            passes = getattr(cut, 'passes', None)
+            if not passes:
+                continue
+            for pos in reversed(passes):
+                try:
+                    positions.append(Decimal(pos))
+                except (InvalidOperation, TypeError, ValueError):
+                    continue
+        return positions
+
+    def _first_pass_distance_from_right(self, cuts, board):
+        '''
+        Determine the distance from the right edge to the first router pass.
+        '''
+        if cuts is None or board is None:
+            return None
+
+        positions = self._collect_pass_positions(cuts)
+        if not positions:
+            return None
+
+        try:
+            width = Decimal(board.width)
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+        return width - positions[0]
+
+    def _back_fence_setting_values(self):
+        '''
+        Calculate the Back Fence Setting values for the results table.
+        '''
+        if self.geom is None:
+            return (None, None)
+
+        boards = getattr(self.geom, 'boards', None)
+        bit = getattr(self.geom, 'bit', None)
+        if boards is None or bit is None:
+            return (None, None)
+
+        if len(boards) < 2:
+            return (None, None)
+
+        distance_a = self._first_pass_distance_from_right(boards[0].bottom_cuts, boards[0])
+        distance_b = self._first_pass_distance_from_right(boards[1].top_cuts, boards[1])
+
+        if distance_a is None or distance_b is None:
+            return (None, None)
+
+        difference = abs(distance_b - distance_a)
+        decimal_value = self._format_decimal_measurement(difference, bit.units)
+        fraction_value = self._format_inches_sixteenth(bit.units.increments_to_inches(difference))
+
+        return (decimal_value, fraction_value)
+
+    def _results_table_values(self, num_rows):
+        '''
+        Build the list of (decimal, fraction) pairs for the results table rows.
+        '''
+        values = [self._back_fence_setting_values()]
+        while len(values) < num_rows:
+            values.append((None, None))
+        return values[:num_rows]
 
     def draw(self, template, boards, bit, spacing, woods, description):
         '''
@@ -658,6 +765,8 @@ class Qt_Fig(QtWidgets.QWidget):
         num_rows = len(row_labels)
         num_cols = 3
 
+        table_values = self._results_table_values(num_rows)
+
         units = self.geom.bit.units
         try:
             target_col_width = units.inches_to_increments(2.25)
@@ -709,9 +818,18 @@ class Qt_Fig(QtWidgets.QWidget):
             y = rect_T.yB() + (idx + 0.5) * row_height
             paint_text(painter, label, (table_left, y),
                        QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, (5, 0))
-            paint_text(painter, dash, (table_left + 1 * col_width + col_width / 2, y),
+            decimal_value, fraction_value = dash, dash
+            if idx < len(table_values):
+                decimal_entry, fraction_entry = table_values[idx]
+                if decimal_entry:
+                    decimal_value = decimal_entry
+                if fraction_entry:
+                    fraction_value = fraction_entry
+            paint_text(painter, decimal_value,
+                       (table_left + 1 * col_width + col_width / 2, y),
                        QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
-            paint_text(painter, dash, (table_left + 2 * col_width + col_width / 2, y),
+            paint_text(painter, fraction_value,
+                       (table_left + 2 * col_width + col_width / 2, y),
                        QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
         options = self._bit_height_options()
