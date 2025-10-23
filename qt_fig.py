@@ -342,9 +342,13 @@ class Qt_Fig(QtWidgets.QWidget):
             window_ar = float(window_width) / window_height
             fig_ar = float(self.fig_width) / self.fig_height
             if fig_ar < window_ar:
-                w = utils.my_round(fig_ar * window_height)
+                min_padding = max(20, int(window_height * 0.03))
+                top_padding = min(min_padding, max(0, window_height - 1))
+                scaled_height = max(1.0, float(window_height - top_padding))
+                scale = scaled_height / self.fig_height
+                scaled_width = scale * self.fig_width
+                w = utils.my_round(scaled_width)
                 painter.translate((window_width - w) // 2, window_height)
-                scale = float(window_height) / self.fig_height
             else:
                 h = utils.my_round(window_width / fig_ar)
                 painter.translate(0, (window_height + h) // 2)
@@ -570,15 +574,37 @@ class Qt_Fig(QtWidgets.QWidget):
         num_rows = len(row_labels)
         num_cols = 3
 
+        units = self.geom.bit.units
+        try:
+            target_col_width = units.inches_to_increments(2.25)
+        except Exception:
+            target_col_width = 0
+        desired_table_width = float(target_col_width) * num_cols
+        max_table_width = float(rect_T.width)
+        use_target_width = target_col_width > 0 and desired_table_width <= max_table_width
+        if use_target_width:
+            table_width = desired_table_width
+            col_width = float(target_col_width)
+        else:
+            table_width = max_table_width
+            col_width = table_width / num_cols if num_cols else max_table_width
+
+        table_left = rect_T.xMid() - table_width / 2.0
+        if table_left < rect_T.xL():
+            table_left = rect_T.xL()
+        table_right = table_left + table_width
+        if table_right > rect_T.xR():
+            table_right = rect_T.xR()
+            table_left = table_right - table_width
+
         row_height = float(rect_T.height) / num_rows if num_rows else rect_T.height
-        col_width = float(rect_T.width) / num_cols if num_cols else rect_T.width
 
         # Draw the grid
         for r in range(num_rows + 1):
             y = rect_T.yB() + r * row_height
-            painter.drawLine(rect_T.xL(), y, rect_T.xR(), y)
+            painter.drawLine(table_left, y, table_right, y)
         for c in range(num_cols + 1):
-            x = rect_T.xL() + c * col_width
+            x = table_left + c * col_width
             painter.drawLine(x, rect_T.yB(), x, rect_T.yT())
 
         self.set_font_size(painter, 'template')
@@ -590,18 +616,18 @@ class Qt_Fig(QtWidgets.QWidget):
         ]
         header_y = rect_T.yT() + max(self.margins.sep * 0.2, 2)
         for idx, header in enumerate(headers):
-            x = rect_T.xL() + (idx + 0.5) * col_width
+            x = table_left + (idx + 0.5) * col_width
             paint_text(painter, header, (x, header_y),
                        QtCore.Qt.AlignHCenter | QtCore.Qt.AlignBottom, (0, -2))
 
         dash = '—'
         for idx, label in enumerate(row_labels):
             y = rect_T.yB() + (idx + 0.5) * row_height
-            paint_text(painter, label, (rect_T.xL(), y),
+            paint_text(painter, label, (table_left, y),
                        QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, (5, 0))
-            paint_text(painter, dash, (rect_T.xL() + 1 * col_width + col_width / 2, y),
+            paint_text(painter, dash, (table_left + 1 * col_width + col_width / 2, y),
                        QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
-            paint_text(painter, dash, (rect_T.xL() + 2 * col_width + col_width / 2, y),
+            paint_text(painter, dash, (table_left + 2 * col_width + col_width / 2, y),
                        QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
         painter.restore()
