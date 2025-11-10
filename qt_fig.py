@@ -573,7 +573,7 @@ class Qt_Fig(QtWidgets.QWidget):
         return (window_width, window_height)
 
     def draw_passes(self, painter, blabel, cuts, y1, y2, flags, xMid,
-                    is_template=True):
+                    is_template=True, board=None):
         '''
         Draws and labels the router passes on a template or board.
 
@@ -585,10 +585,12 @@ class Qt_Fig(QtWidgets.QWidget):
         flags: Horizontal alignment for label
         xMid: x-location of board center
         is_template: If true, then a template
+        board: Optional Board geometry used to clamp overlay labels to the
+               actual board extents when drawing overlays.
 
         Returns the pass label if a pass matches xMid, None otherwise
         '''
-        board_T = self.geom.board_T
+        board_geom = board if board is not None else self.geom.board_T
         shift = (0, 0)  # for adjustments of text
         passMid = None  # location of board-center pass (return value)
         font_type = 'template'
@@ -629,7 +631,15 @@ class Qt_Fig(QtWidgets.QWidget):
                     flagsv |= QtCore.Qt.AlignBottom
                 else:
                     flagsv |= QtCore.Qt.AlignVCenter
-            xpShift = xp[i] + board_T.xL()
+            pass_x = xp[i] + board_geom.xL()
+            xpShift = pass_x
+            if not is_template and board is not None:
+                board_left = board_geom.xL()
+                board_right = board_geom.xR()
+                if pass_x < board_left:
+                    xpShift = board_left
+                elif pass_x > board_right:
+                    xpShift = board_right
             # Draw the text label for this pass
             label = ''
             this_is_midpoint = False
@@ -641,7 +651,7 @@ class Qt_Fig(QtWidgets.QWidget):
             if not is_template and self.config.show_router_pass_locations:
                 if label:
                     label += ': '
-                loc = self.geom.bit.units.increments_to_string(board_T.xR() - xpShift)
+                loc = self.geom.bit.units.increments_to_string(board_geom.xR() - xpShift)
                 label += loc
             painter.save()
             if this_is_midpoint and is_template:
@@ -696,7 +706,7 @@ class Qt_Fig(QtWidgets.QWidget):
             y1 = boards[0].yB() - sep_over_2
             y2 = boards[0].yB() + frac_depth
             self.draw_passes(painter, 'A', boards[0].bottom_cuts, y1, y2,
-                             flagsL, xMid, False)
+                             flagsL, xMid, False, board=boards[0])
 
         i = 0
         # Double-double passes
@@ -704,12 +714,12 @@ class Qt_Fig(QtWidgets.QWidget):
             y1 = boards[3].yT() + sep_over_2
             y2 = boards[3].yT() - frac_depth
             self.draw_passes(painter, self.labels[i], boards[3].top_cuts, y1, y2,
-                             flagsR, xMid, False)
+                             flagsR, xMid, False, board=boards[3])
 
             y1 = boards[3].yB() - sep_over_2
             y2 = boards[3].yB() + frac_depth
             self.draw_passes(painter, self.labels[i + 1], boards[3].bottom_cuts, y1, y2,
-                             flagsL, xMid, False)
+                             flagsL, xMid, False, board=boards[3])
             i += 2
 
         # Double passes
@@ -717,12 +727,12 @@ class Qt_Fig(QtWidgets.QWidget):
             y1 = boards[2].yT() + sep_over_2
             y2 = boards[2].yT() - frac_depth
             self.draw_passes(painter, self.labels[i], boards[2].top_cuts, y1, y2,
-                             flagsR, xMid, False)
+                             flagsR, xMid, False, board=boards[2])
 
             y1 = boards[2].yB() - sep_over_2
             y2 = boards[2].yB() + frac_depth
             self.draw_passes(painter, self.labels[i + 1], boards[2].bottom_cuts, y1, y2,
-                             flagsL, xMid, False)
+                             flagsL, xMid, False, board=boards[2])
             i += 2
 
         # Bottom board passes
@@ -730,7 +740,7 @@ class Qt_Fig(QtWidgets.QWidget):
             y1 = boards[1].yT() + sep_over_2
             y2 = boards[1].yT() - frac_depth
             self.draw_passes(painter, self.labels[i], boards[1].top_cuts, y1, y2,
-                             flagsR, xMid, False)
+                             flagsR, xMid, False, board=boards[1])
 
         painter.restore()
 
