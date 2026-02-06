@@ -599,9 +599,20 @@ class Qt_Fig(QtWidgets.QWidget):
         # Collect the router pass locations in a single array by looping
         # through each cut and each pass for each cut, right-to-left.
         xp = []
+        pass_meta = []
+        cut_index = 1
         for c in cuts[::-1]:
+            if not c.passes:
+                cut_index += 1
+                continue
+            mid_pass = c.passes[len(c.passes) // 2]
             for p in lrange(len(c.passes) - 1, -1, -1):
                 xp.append(c.passes[p])
+                pass_meta.append({
+                    'cut_index': cut_index,
+                    'is_midpass': c.passes[p] == mid_pass,
+                })
+            cut_index += 1
         # Loop through the passes and do the labels
         np = len(xp)
         for i in lrange(np):
@@ -644,7 +655,8 @@ class Qt_Fig(QtWidgets.QWidget):
             label = ''
             this_is_midpoint = False
             if is_template or self.config.show_router_pass_identifiers:
-                label = '%d%s' % (i + 1, blabel)
+                if pass_meta[i]['is_midpass']:
+                    label = '%d%s' % (pass_meta[i]['cut_index'], blabel)
                 if xpShift == xMid:
                     passMid = label
                     this_is_midpoint = True
