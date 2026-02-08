@@ -672,6 +672,7 @@ class Qt_Fig(QtWidgets.QWidget):
                 p2 = QtCore.QPointF(line_x, y2)
                 painter.drawLine(p1, p2)
                 continue
+            line_x = label_x
             painter.save()
             if this_is_midpoint and is_template:
                 pen = painter.pen()
