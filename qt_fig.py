@@ -665,9 +665,11 @@ class Qt_Fig(QtWidgets.QWidget):
                     label += ': '
                 loc = self.geom.bit.units.increments_to_string(board_geom.xR() - xpShift)
                 label += loc
+            label_x = pass_x
+            line_x = xpShift
             if not label:
-                p1 = QtCore.QPointF(xpShift, y1)
-                p2 = QtCore.QPointF(xpShift, y2)
+                p1 = QtCore.QPointF(line_x, y1)
+                p2 = QtCore.QPointF(line_x, y2)
                 painter.drawLine(p1, p2)
                 continue
             painter.save()
@@ -675,7 +677,7 @@ class Qt_Fig(QtWidgets.QWidget):
                 pen = painter.pen()
                 pen.setColor(self.colors['center_color'])
                 painter.setPen(pen)
-            r = paint_text(painter, label, (xpShift, y1), flagsv, shift, -90)
+            r = paint_text(painter, label, (label_x, y1), flagsv, shift, -90)
             # Determine the line starting point from the size of the text.
             # Create a small margin so that the starting point is not too
             # close to the text.
@@ -690,8 +692,8 @@ class Qt_Fig(QtWidgets.QWidget):
                     y1text += 0.05 * (y2 - y1text)
             # If there is any room left, draw the line from the label to the base of cut
             if (y1 - y2) * (y1text - y2) > 0:
-                p1 = QtCore.QPointF(xpShift, y1text)
-                p2 = QtCore.QPointF(xpShift, y2)
+                p1 = QtCore.QPointF(line_x, y1text)
+                p2 = QtCore.QPointF(line_x, y2)
                 painter.drawLine(p1, p2)
             painter.restore()
         return passMid
