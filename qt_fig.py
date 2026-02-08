@@ -665,6 +665,11 @@ class Qt_Fig(QtWidgets.QWidget):
                     label += ': '
                 loc = self.geom.bit.units.increments_to_string(board_geom.xR() - xpShift)
                 label += loc
+            if not label:
+                p1 = QtCore.QPointF(xpShift, y1)
+                p2 = QtCore.QPointF(xpShift, y2)
+                painter.drawLine(p1, p2)
+                continue
             painter.save()
             if this_is_midpoint and is_template:
                 pen = painter.pen()
