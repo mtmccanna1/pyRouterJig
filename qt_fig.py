@@ -660,9 +660,8 @@ class Qt_Fig(QtWidgets.QWidget):
                 if xpShift == xMid:
                     passMid = label
                     this_is_midpoint = True
-            if not is_template and self.config.show_router_pass_locations:
-                if label:
-                    label += ': '
+            if not is_template and self.config.show_router_pass_locations and label:
+                label += ': '
                 loc = self.geom.bit.units.increments_to_string(board_geom.xR() - xpShift)
                 label += loc
             label_x = pass_x
