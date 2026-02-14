@@ -605,6 +605,8 @@ class Qt_Fig(QtWidgets.QWidget):
             if not c.passes:
                 cut_index += 1
                 continue
+                # Keep pass metadata within append() so merges don't leave
+                # orphan dictionary lines that break indentation.
                     'is_labelpass': False,
 
         if not is_template and board is not None:
