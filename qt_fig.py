@@ -648,9 +648,9 @@ class Qt_Fig(QtWidgets.QWidget):
                 board_left = board_geom.xL()
                 board_right = board_geom.xR()
                 if pass_x < board_left:
-                    xpShift = board_left
+                    continue
                 elif pass_x > board_right:
-                    xpShift = board_right
+                    continue
             # Draw the text label for this pass
             label = ''
             this_is_midpoint = False
