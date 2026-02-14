@@ -605,7 +605,35 @@ class Qt_Fig(QtWidgets.QWidget):
             if not c.passes:
                 cut_index += 1
                 continue
-            mid_pass = c.passes[len(c.passes) // 2]
+                    'is_labelpass': False,
+
+        if not is_template and board is not None:
+            board_left = board_geom.xL()
+            board_right = board_geom.xR()
+            cut_indices = {}
+            for i in lrange(len(xp)):
+                cut_indices.setdefault(pass_meta[i]['cut_index'], []).append(i)
+
+            for indices in cut_indices.values():
+                chosen = None
+                for i in indices:
+                    if pass_meta[i]['is_midpass']:
+                        pass_x = xp[i] + board_geom.xL()
+                        if board_left <= pass_x <= board_right:
+                            chosen = i
+                        break
+                if chosen is None:
+                    for i in indices:
+                        pass_x = xp[i] + board_geom.xL()
+                        if board_left <= pass_x <= board_right:
+                            chosen = i
+                            break
+                if chosen is not None:
+                    pass_meta[chosen]['is_labelpass'] = True
+        else:
+            for meta in pass_meta:
+                meta['is_labelpass'] = meta['is_midpass']
+                if pass_meta[i]['is_labelpass']:
             for p in lrange(len(c.passes) - 1, -1, -1):
                 xp.append(c.passes[p])
                 pass_meta.append({
