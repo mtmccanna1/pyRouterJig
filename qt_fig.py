@@ -98,6 +98,7 @@ class Qt_Fig(QtWidgets.QWidget):
         self.config = config
         self.colors = {}
         self.woods = {}
+        self.spacing = None
         self.description = ''
         self.fig_width = -1
         self.fig_height = -1
@@ -370,6 +371,99 @@ class Qt_Fig(QtWidgets.QWidget):
 
         return width - positions[0]
 
+    def _spacing_between_stops_values(self):
+        '''
+        Calculate the template stop spacing as 2B - 1B - 1/2".
+        '''
+        if self.geom is None:
+            return (None, None)
+
+        if self._requires_manual_stop_setup():
+            return (self.transl.tr('Manual setup'), None)
+
+        boards = getattr(self.geom, 'boards', None)
+        bit = getattr(self.geom, 'bit', None)
+        if boards is None or bit is None or len(boards) < 2:
+            return (None, None)
+
+        positions = self._collect_pass_positions(boards[1].top_cuts)
+        if len(positions) < 2:
+            return (None, None)
+
+        try:
+            width = Decimal(boards[1].width)
+            stop_nut_diameter = Decimal(bit.units.inches_to_increments(0.5))
+        except (InvalidOperation, TypeError, ValueError):
+            return (None, None)
+
+        first_stop = width - positions[0]
+        second_stop = width - positions[1]
+        spacing = second_stop - first_stop - stop_nut_diameter
+        if spacing < 0:
+            return (None, None)
+
+        decimal_value = self._format_decimal_measurement(spacing, bit.units)
+        fraction_value = self._format_inches_sixteenth(bit.units.increments_to_inches(spacing))
+
+        return (decimal_value, fraction_value)
+
+    def _requires_manual_stop_setup(self):
+        '''
+        Determine whether stop spacing must be set manually for this configuration.
+        '''
+        if self.geom is None:
+            return False
+
+        spacing_obj = getattr(self, 'spacing', None)
+        if spacing_obj is None or spacing_obj.__class__.__name__ != 'Equally_Spaced':
+            return True
+
+        boards = getattr(self.geom, 'boards', None)
+        if boards is None or len(boards) < 2:
+            return False
+
+        cuts = getattr(boards[1], 'top_cuts', None)
+        if not cuts:
+            return False
+
+        for cut in cuts:
+            passes = getattr(cut, 'passes', None)
+            if passes and len(passes) > 1:
+                return True
+
+        return False
+
+    def _manual_stop_setup_note(self):
+        '''
+        Return the manual setup note for unsupported stop-spacing configurations.
+        '''
+        if not self._requires_manual_stop_setup():
+            return None
+
+        return self.transl.tr(
+            'For this configuration, use the diagram to manually set up the required cut '
+            'locations.'
+        )
+
+    def _back_fence_setting_increments(self):
+        '''
+        Calculate the Back Fence Setting in raw increments.
+        '''
+        if self.geom is None:
+            return None
+
+        boards = getattr(self.geom, 'boards', None)
+        if boards is None or len(boards) < 2:
+            return None
+
+        distance_a = self._first_pass_distance_from_right(boards[0].bottom_cuts, boards[0])
+        distance_b = self._first_pass_distance_from_right(boards[1].top_cuts, boards[1])
+
+        if distance_a is None or distance_b is None:
+            return None
+
+        return abs(distance_b - distance_a)
+
     def _back_fence_setting_values(self):
         '''
         Calculate the Back Fence Setting values for the results table.
@@ -385,15 +479,132 @@ class Qt_Fig(QtWidgets.QWidget):
         if len(boards) < 2:
             return (None, None)
 
+        difference = self._back_fence_setting_increments()
+        if difference is None:
+            return (None, None)
+
+        decimal_value = self._format_decimal_measurement(difference, bit.units)
+        fraction_value = self._format_inches_sixteenth(bit.units.increments_to_inches(difference))
+
+        return (decimal_value, fraction_value)
+
+    def _template_panel_position_values(self):
+        '''
+        Calculate the template panel position as 5 - F + MIN(1A, 1B).
+        '''
+        if self.geom is None:
+            return (None, None)
+
+        boards = getattr(self.geom, 'boards', None)
+        bit = getattr(self.geom, 'bit', None)
+        if boards is None or bit is None or len(boards) < 2:
+            return (None, None)
+
+        back_fence_setting = self._back_fence_setting_increments()
         distance_a = self._first_pass_distance_from_right(boards[0].bottom_cuts, boards[0])
         distance_b = self._first_pass_distance_from_right(boards[1].top_cuts, boards[1])
 
-        if distance_a is None or distance_b is None:
+        if back_fence_setting is None or distance_a is None or distance_b is None:
             return (None, None)
 
-        difference = abs(distance_b - distance_a)
-        decimal_value = self._format_decimal_measurement(difference, bit.units)
-        fraction_value = self._format_inches_sixteenth(bit.units.increments_to_inches(difference))
+        try:
+            zero_position = Decimal(bit.units.inches_to_increments(5.0))
+        except (InvalidOperation, TypeError, ValueError):
+            return (None, None)
+
+        lowest_first_cut = min(distance_a, distance_b)
+        panel_position = zero_position - back_fence_setting + lowest_first_cut
+
+        decimal_value = self._format_decimal_measurement(panel_position, bit.units)
+        fraction_value = self._format_inches_sixteenth(
+            bit.units.increments_to_inches(panel_position)
+        )
+
+        return (decimal_value, fraction_value)
+
+    def _rabbet_cut_setting_values(self):
+        '''
+        Calculate the rabbet cut setting.
+        '''
+        if self.geom is None:
+            return (None, None)
+
+        bit = getattr(self.geom, 'bit', None)
+        if bit is None:
+            return (None, None)
+
+        try:
+            angle = float(bit.angle)
+        except (TypeError, ValueError):
+            return (None, None)
+
+        if angle == 0:
+            return (
+                self._format_decimal_measurement(0, bit.units),
+                self._format_inches_sixteenth(0),
+            )
+
+        try:
+            tail_thickness = Decimal(bit.units.abstract_to_increments(
+                self.config.tail_board_thickness, False
+            ))
+            bit_radius = Decimal(bit.width) / Decimal('2')
+            bit_height = Decimal(bit.depth)
+            cosine = math.cos(math.radians(angle))
+        except (AttributeError, InvalidOperation, TypeError, ValueError):
+            return (None, None)
+
+        if math.isclose(cosine, 0.0):
+            return (None, None)
+
+        try:
+            offset = Decimal(str(math.sqrt(
+                (float(bit_height) / cosine) ** 2 - float(bit_height) ** 2
+            )))
+        except (ValueError, OverflowError):
+            return (None, None)
+
+        rabbet_setting = tail_thickness + bit_radius - offset
+
+        decimal_value = self._format_decimal_measurement(rabbet_setting, bit.units)
+        fraction_value = self._format_inches_sixteenth(
+            bit.units.increments_to_inches(rabbet_setting)
+        )
+
+        return (decimal_value, fraction_value)
+
+    def _dovetail_cut_setting_values(self):
+        '''
+        Calculate the dovetail cut setting.
+        '''
+        if self.geom is None:
+            return (None, None)
+
+        bit = getattr(self.geom, 'bit', None)
+        if bit is None:
+            return (None, None)
+
+        try:
+            angle = float(bit.angle)
+            tail_thickness = Decimal(bit.units.abstract_to_increments(
+                self.config.tail_board_thickness, False
+            ))
+            bit_height = Decimal(bit.depth)
+            bit_diameter = Decimal(bit.width)
+            tangent = Decimal(str(math.tan(math.radians(angle))))
+        except (AttributeError, InvalidOperation, TypeError, ValueError):
+            return (None, None)
+
+        slope_offset = bit_height * tangent
+        dovetail_setting = (
+            tail_thickness
+            - (slope_offset - ((bit_diameter - Decimal('2') * slope_offset) / Decimal('2')))
+        )
+
+        decimal_value = self._format_decimal_measurement(dovetail_setting, bit.units)
+        fraction_value = self._format_inches_sixteenth(
+            bit.units.increments_to_inches(dovetail_setting)
+        )
 
         return (decimal_value, fraction_value)
 
@@ -401,7 +612,13 @@ class Qt_Fig(QtWidgets.QWidget):
         '''
         Build the list of (decimal, fraction) pairs for the results table rows.
         '''
-        values = [self._back_fence_setting_values()]
+        values = [
+            self._back_fence_setting_values(),
+            self._spacing_between_stops_values(),
+            self._template_panel_position_values(),
+            self._rabbet_cut_setting_values(),
+            self._dovetail_cut_setting_values(),
+        ]
         while len(values) < num_rows:
             values.append((None, None))
         return values[:num_rows]
@@ -413,6 +630,7 @@ class Qt_Fig(QtWidgets.QWidget):
         # Generate the new geometry layout
         self.set_fig_dimensions(template, boards)
         self.woods = woods
+        self.spacing = spacing
         self.description = description
         self.geom = router.Joint_Geometry(template, boards, bit, spacing, self.margins,
                                           self.config)
@@ -423,6 +641,7 @@ class Qt_Fig(QtWidgets.QWidget):
         Prints the figure
         '''
         self.woods = woods
+        self.spacing = spacing
         self.description = description
         self.set_colors(self.config.print_color)
 
@@ -605,9 +824,15 @@ class Qt_Fig(QtWidgets.QWidget):
             if not c.passes:
                 cut_index += 1
                 continue
-                # Keep pass metadata within append() so merges don't leave
-                # orphan dictionary lines that break indentation.
+            mid_pass = c.passes[len(c.passes) // 2]
+            for p in lrange(len(c.passes) - 1, -1, -1):
+                xp.append(c.passes[p])
+                pass_meta.append({
+                    'cut_index': cut_index,
+                    'is_midpass': c.passes[p] == mid_pass,
                     'is_labelpass': False,
+                })
+            cut_index += 1
 
         if not is_template and board is not None:
             board_left = board_geom.xL()
@@ -635,14 +860,6 @@ class Qt_Fig(QtWidgets.QWidget):
         else:
             for meta in pass_meta:
                 meta['is_labelpass'] = meta['is_midpass']
-                if pass_meta[i]['is_labelpass']:
-            for p in lrange(len(c.passes) - 1, -1, -1):
-                xp.append(c.passes[p])
-                pass_meta.append({
-                    'cut_index': cut_index,
-                    'is_midpass': c.passes[p] == mid_pass,
-                })
-            cut_index += 1
         # Loop through the passes and do the labels
         np = len(xp)
         for i in lrange(np):
@@ -685,7 +902,7 @@ class Qt_Fig(QtWidgets.QWidget):
             label = ''
             this_is_midpoint = False
             if is_template or self.config.show_router_pass_identifiers:
-                if pass_meta[i]['is_midpass']:
+                if pass_meta[i]['is_labelpass']:
                     label = '%d%s' % (pass_meta[i]['cut_index'], blabel)
                 if xpShift == xMid:
                     passMid = label
@@ -901,6 +1118,12 @@ class Qt_Fig(QtWidgets.QWidget):
         text_y = rect_T.yB() - max(self.margins.sep * 0.4, 12)
         paint_text(painter, options_text, (rect_T.xMid(), text_y),
                    QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
+
+        manual_note = self._manual_stop_setup_note()
+        if manual_note:
+            note_y = text_y - max(self.margins.sep * 0.35, 10)
+            paint_text(painter, manual_note, (rect_T.xMid(), note_y),
+                       QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
 
         painter.restore()
 
