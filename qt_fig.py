@@ -353,14 +353,59 @@ class Qt_Fig(QtWidgets.QWidget):
                     continue
         return positions
 
-    def _first_pass_distance_from_right(self, cuts, board):
+    def _collect_cut_label_positions(self, cuts, board):
         '''
-        Determine the distance from the right edge to the first router pass.
+        Gather one label position per cut, ordered right to left.
+
+        For each cut, prefer the midpoint pass when it lies on the board.
+        Otherwise, use the first visible pass on the board. This mirrors the
+        labeling logic used by draw_passes() for board overlays.
+        '''
+        positions = []
+        if cuts is None or board is None:
+            return positions
+
+        try:
+            board_left = Decimal('0')
+            board_right = Decimal(board.width)
+        except (InvalidOperation, TypeError, ValueError):
+            return positions
+
+        for cut in cuts[::-1]:
+            passes = getattr(cut, 'passes', None)
+            if not passes:
+                continue
+
+            try:
+                pass_positions = [Decimal(p) for p in passes]
+            except (InvalidOperation, TypeError, ValueError):
+                continue
+
+            mid_index = len(pass_positions) // 2
+            mid_pass = pass_positions[mid_index]
+            chosen = None
+
+            if board_left <= mid_pass <= board_right:
+                chosen = mid_pass
+            else:
+                for pos in reversed(pass_positions):
+                    if board_left <= pos <= board_right:
+                        chosen = pos
+                        break
+
+            if chosen is not None:
+                positions.append(chosen)
+
+        return positions
+
+    def _first_cut_distance_from_right(self, cuts, board):
+        '''
+        Determine the distance from the right edge to the first cut label position.
         '''
         if cuts is None or board is None:
             return None
 
-        positions = self._collect_pass_positions(cuts)
+        positions = self._collect_cut_label_positions(cuts, board)
         if not positions:
             return None
 
@@ -386,7 +431,7 @@ class Qt_Fig(QtWidgets.QWidget):
         if boards is None or bit is None or len(boards) < 2:
             return (None, None)
 
-        positions = self._collect_pass_positions(boards[1].top_cuts)
+        positions = self._collect_cut_label_positions(boards[1].top_cuts, boards[1])
         if len(positions) < 2:
             return (None, None)
 
@@ -412,25 +457,40 @@ class Qt_Fig(QtWidgets.QWidget):
         Determine whether stop spacing must be set manually for this configuration.
         '''
         if self.geom is None:
+            if self.config.debug:
+                print('manual stop setup: geom is None -> False')
             return False
 
         spacing_obj = getattr(self, 'spacing', None)
-        if spacing_obj is None or spacing_obj.__class__.__name__ != 'Equally_Spaced':
+        if spacing_obj is None:
+            if self.config.debug:
+                print('manual stop setup: spacing object is None -> True')
+            return True
+
+        spacing_name = spacing_obj.__class__.__name__
+        if spacing_name != 'Equally_Spaced':
+            if self.config.debug:
+                print('manual stop setup: spacing mode is %s -> True' % spacing_name)
             return True
 
         boards = getattr(self.geom, 'boards', None)
         if boards is None or len(boards) < 2:
+            if self.config.debug:
+                print('manual stop setup: boards missing or incomplete -> False')
             return False
 
         cuts = getattr(boards[1], 'top_cuts', None)
         if not cuts:
+            if self.config.debug:
+                print('manual stop setup: B top cuts missing -> False')
             return False
 
-        for cut in cuts:
-            passes = getattr(cut, 'passes', None)
-            if passes and len(passes) > 1:
-                return True
-
+        if self.config.debug:
+            positions = self._collect_cut_label_positions(cuts, boards[1])
+            display_positions = [float(p) / self.geom.bit.units.increments_per_inch
+                                 for p in positions[:2]]
+            print('manual stop setup: Equal mode supported, first labeled B cuts %s -> False'
+                  % display_positions)
         return False
 
     def _manual_stop_setup_note(self):
@@ -445,6 +505,66 @@ class Qt_Fig(QtWidgets.QWidget):
             'locations.'
         )
 
+    def _end_thickness_warning(self):
+        '''
+        Return a best-practice warning when the right-end thickness on board A
+        or board B exceeds the bit diameter by more than 1/8".
+        '''
+        if self.geom is None:
+            return None
+
+        boards = getattr(self.geom, 'boards', None)
+        bit = getattr(self.geom, 'bit', None)
+        if boards is None or bit is None or len(boards) < 2:
+            return None
+
+        try:
+            threshold = Decimal(bit.width) + Decimal(bit.units.inches_to_increments(0.125))
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+        warnings = []
+        board_specs = [
+            ('A', boards[0], getattr(boards[0], 'bottom_cuts', None)),
+            ('B', boards[1], getattr(boards[1], 'top_cuts', None)),
+        ]
+
+        for label, board, cuts in board_specs:
+            if not cuts:
+                continue
+            try:
+                end_thickness = Decimal(board.width) - Decimal(cuts[-1].xmax)
+            except (InvalidOperation, TypeError, ValueError):
+                continue
+            if end_thickness > threshold:
+                end_text = self._format_decimal_measurement(end_thickness, bit.units)
+                warnings.append('%s: %s' % (label, end_text))
+
+        if not warnings:
+            return None
+
+        threshold_text = self._format_decimal_measurement(threshold, bit.units)
+        return self.transl.tr(
+            'Warning: End thickness exceeds the recommended limit ({}) for this bit setup. {}'
+        ).format(threshold_text, ', '.join(warnings))
+
+    def get_status_warning(self):
+        '''
+        Return the current status-bar warning, if any.
+        '''
+        return self._end_thickness_warning()
+
+    def get_bit_height_options_text(self):
+        '''
+        Return the bit height options as a single display string.
+        '''
+        options = self._bit_height_options()
+        if options:
+            options_body = self.transl.tr('{} or {}').format(options[0], options[1])
+        else:
+            options_body = '—'
+        return self.transl.tr('Bit Height Options: {}').format(options_body)
+
     def _back_fence_setting_increments(self):
         '''
         Calculate the Back Fence Setting in raw increments.
@@ -456,8 +576,8 @@ class Qt_Fig(QtWidgets.QWidget):
         if boards is None or len(boards) < 2:
             return None
 
-        distance_a = self._first_pass_distance_from_right(boards[0].bottom_cuts, boards[0])
-        distance_b = self._first_pass_distance_from_right(boards[1].top_cuts, boards[1])
+        distance_a = self._first_cut_distance_from_right(boards[0].bottom_cuts, boards[0])
+        distance_b = self._first_cut_distance_from_right(boards[1].top_cuts, boards[1])
 
         if distance_a is None or distance_b is None:
             return None
@@ -501,8 +621,8 @@ class Qt_Fig(QtWidgets.QWidget):
             return (None, None)
 
         back_fence_setting = self._back_fence_setting_increments()
-        distance_a = self._first_pass_distance_from_right(boards[0].bottom_cuts, boards[0])
-        distance_b = self._first_pass_distance_from_right(boards[1].top_cuts, boards[1])
+        distance_a = self._first_cut_distance_from_right(boards[0].bottom_cuts, boards[0])
+        distance_b = self._first_cut_distance_from_right(boards[1].top_cuts, boards[1])
 
         if back_fence_setting is None or distance_a is None or distance_b is None:
             return (None, None)
@@ -1097,9 +1217,9 @@ class Qt_Fig(QtWidgets.QWidget):
             decimal_value, fraction_value = dash, dash
             if idx < len(table_values):
                 decimal_entry, fraction_entry = table_values[idx]
-                if decimal_entry:
+                if decimal_entry is not None:
                     decimal_value = decimal_entry
-                if fraction_entry:
+                if fraction_entry is not None:
                     fraction_value = fraction_entry
             paint_text(painter, decimal_value,
                        (table_left + 1 * col_width + col_width / 2, y),
@@ -1108,20 +1228,9 @@ class Qt_Fig(QtWidgets.QWidget):
                        (table_left + 2 * col_width + col_width / 2, y),
                        QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
 
-        options = self._bit_height_options()
-        if options:
-            options_body = self.transl.tr('{} or {}').format(options[0], options[1])
-        else:
-            options_body = '—'
-
-        options_text = self.transl.tr('Bit Height Options: {}').format(options_body)
-        text_y = rect_T.yB() - max(self.margins.sep * 0.4, 12)
-        paint_text(painter, options_text, (rect_T.xMid(), text_y),
-                   QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
-
         manual_note = self._manual_stop_setup_note()
         if manual_note:
-            note_y = text_y - max(self.margins.sep * 0.35, 10)
+            note_y = rect_T.yB() - max(self.margins.sep * 0.4, 12)
             paint_text(painter, manual_note, (rect_T.xMid(), note_y),
                        QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
 

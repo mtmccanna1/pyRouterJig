@@ -762,14 +762,25 @@ class Joint_Geometry(object):
         if config.show_fit:
             board_sep = -bit.depth
 
-        # Create the corners of the template
-        self.rect_T = My_Rectangle(margins.left, margins.bottom,
-                                   template.length, template.height)
+        # Create the corners of the template. When the template itself is hidden,
+        # allow the table to grow downward into the existing bottom margin
+        # instead of pushing the rest of the diagram upward.
+        rect_t_height = template.height
+        rect_t_bottom = margins.bottom
+        if not getattr(config, 'show_template', False):
+            desired_height = max(rect_t_height, bit.units.inches_to_increments(0.875))
+            extra_height = max(0, desired_height - rect_t_height)
+            grow_down = min(extra_height, margins.bottom)
+            rect_t_bottom -= grow_down
+            rect_t_height += grow_down
+
+        self.rect_T = My_Rectangle(margins.left, rect_t_bottom,
+                                   template.length, rect_t_height)
 
         # The sub-rectangle in the template of the board's width
         # (no template margins)
         self.board_T = My_Rectangle(self.rect_T.xL() + template.margin, self.rect_T.yB(),
-                                    boards[0].width, template.height)
+                                    boards[0].width, rect_t_height)
         x = self.board_T.xL()
         y = self.rect_T.yT() + margins.sep
 

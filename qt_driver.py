@@ -460,6 +460,7 @@ class Driver(QtWidgets.QMainWindow):
         Creates all of the widgets in the main panel
         '''
         self.main_frame = QtWidgets.QWidget()
+        self._apply_ui_theme()
 
         lineEditWidth = 80
         us = self.units.units_string(withParens=True)
@@ -696,6 +697,12 @@ class Driver(QtWidgets.QMainWindow):
         self.le_description.editingFinished.connect(self._on_description)
         self.le_description.setAlignment(QtCore.Qt.AlignHCenter)
 
+        self.bit_height_info_label = QtWidgets.QLabel(self.transl.tr('Bit Height Options: —'),
+                                                      self.main_frame)
+        self.bit_height_info_label.setAlignment(QtCore.Qt.AlignHCenter)
+        self.bit_height_info_label.setWordWrap(True)
+        self.bit_height_info_label.setObjectName('bitHeightInfoLabel')
+
         ######################################################################
         # Layout widgets in the main frame
         ######################################################################
@@ -706,6 +713,7 @@ class Driver(QtWidgets.QMainWindow):
 
         # Add the figure canvas to the top
         vbox.addWidget(self.fig.canvas)
+        vbox.addWidget(self.bit_height_info_label)
 
         # hbox contains all of the control widgets
         # (everything but the canvas)
@@ -896,6 +904,99 @@ class Driver(QtWidgets.QMainWindow):
         self._on_wood(3)
         self.update_tooltips()
 
+    def _apply_ui_theme(self):
+        '''
+        Apply a lighter, higher-contrast UI theme for the control area.
+        '''
+        self.main_frame.setStyleSheet("""
+            QWidget {
+                background-color: #f4efe6;
+                color: #2f2417;
+            }
+            QLabel {
+                color: #3b2c1d;
+                background: transparent;
+            }
+            QLabel#bitHeightInfoLabel {
+                color: #5a4026;
+                background-color: #efe4d2;
+                border: 1px solid #c9b18a;
+                border-radius: 5px;
+                padding: 6px 10px;
+                margin-top: 4px;
+            }
+            QLineEdit, QComboBox, QTabWidget::pane, QFrame {
+                background-color: #fffaf2;
+                color: #24180d;
+                border: 1px solid #b89b74;
+                border-radius: 4px;
+            }
+            QLineEdit {
+                padding: 4px 6px;
+                selection-background-color: #c98d3a;
+                selection-color: #fffaf2;
+            }
+            QComboBox {
+                padding: 3px 24px 3px 6px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #fffaf2;
+                color: #24180d;
+                selection-background-color: #d7b27a;
+                selection-color: #24180d;
+            }
+            QTabBar::tab {
+                background-color: #e7dac5;
+                color: #3b2c1d;
+                border: 1px solid #b89b74;
+                border-bottom: none;
+                padding: 6px 12px;
+                margin-right: 2px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+            }
+            QTabBar::tab:selected {
+                background-color: #fffaf2;
+                color: #24180d;
+            }
+            QTabBar::tab:!selected {
+                margin-top: 2px;
+            }
+            QPushButton, QToolButton {
+                background-color: #ead8bd;
+                color: #2f2417;
+                border: 1px solid #b0895d;
+                border-radius: 4px;
+                padding: 4px 8px;
+            }
+            QPushButton:hover, QToolButton:hover {
+                background-color: #f0e2cb;
+            }
+            QPushButton:pressed, QToolButton:pressed {
+                background-color: #d7b27a;
+            }
+            QCheckBox {
+                color: #3b2c1d;
+                spacing: 6px;
+                background: transparent;
+            }
+            QSlider::groove:horizontal {
+                background: #d8c2a1;
+                height: 6px;
+                border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: #9b6b30;
+                width: 14px;
+                margin: -5px 0;
+                border-radius: 7px;
+            }
+            QSlider::sub-page:horizontal {
+                background: #c98d3a;
+                border-radius: 3px;
+            }
+        """)
+
     def update_cb_vsfingers(self, vMin, vMax, value):
         '''
         Updates the combobox for Variable spacing Fingers.
@@ -1014,6 +1115,16 @@ class Driver(QtWidgets.QMainWindow):
         '''
         Displays a message to the status bar
         '''
+        fig_warning = None
+        if not warning and getattr(self, 'fig', None) is not None:
+            try:
+                fig_warning = self.fig.get_status_warning()
+            except AttributeError:
+                fig_warning = None
+        if fig_warning:
+            msg = fig_warning
+            warning = True
+
         if warning:
             style = 'background-color: red; color: white'
             self.status_message_label.setStyleSheet(style)
@@ -1051,7 +1162,9 @@ class Driver(QtWidgets.QMainWindow):
         self.template = router.Incra_Template(self.units, self.boards)
         self.fig.draw(self.template, self.boards, self.bit, self.spacing, self.woods,
                       self.description)
+        self.bit_height_info_label.setText(self.fig.get_bit_height_options_text())
         self.status_fit()
+        self.status_message(self.status_message_label.text())
 
     def reinit_spacing(self):
         '''
