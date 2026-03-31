@@ -138,7 +138,7 @@ class Router_Bit(object):
             val = '6'
         else:
             val = '1/2'
-        msg = self.transl.tr('Unable to set Bit Width to: {}<p>'\
+        msg = self.transl.tr('Unable to set Bit Diam. to: {}<p>'\
               'Set to a positive value, such as: {}').format(s, val)
         try:
             if self.units.metric:
@@ -154,7 +154,7 @@ class Router_Bit(object):
 
         halfwidth = width // 2
         if (2 * halfwidth != width or math.floor(width) != width) and self.angle == 0:
-            msg += self.transl.tr('<p>Stright Bit Width must be an even number of increments.<p>'\
+            msg += self.transl.tr('<p>Stright Bit Diam. must be an even number of increments.<p>'\
                    'The increment size is: {}<p>'\
                    '').format(self.units.increments_to_string(1, True))
             raise Router_Exception(msg)
@@ -191,7 +191,7 @@ class Router_Bit(object):
             angle = self.units.string_to_float(s)
             if angle == 0 and math.floor(self.width_f) != self.width_f:
                 msg = self.transl.tr('Unable to set Bit Angle to: 0<p>' \
-                      'Change Bit Width to odd value first <p>'\
+                      'Change Bit Diam. to odd value first <p>'\
                       'than drop angle to 0 to get stright bit')
                 raise()
         except:
@@ -591,7 +591,7 @@ class Cut(object):
                                    % (self.xmin, self.xmax, board.width))
         if (bit.width_f - (self.xmax - self.xmin)) > self.precision and self.xmin > 0 and self.xmax < board.width:
             raise Router_Exception(bit.transl.tr('cut xmin = %f, xmax = %f ): '
-                                                 'Bit width (%f) delta too large for this cut!')
+                                                 'Bit diam. (%f) delta too large for this cut!')
                                    % (self.xmin, self.xmax, bit.width_f))
 
     def make_router_passes(self, bit, board):
@@ -599,7 +599,7 @@ class Cut(object):
         The logic below assumes bit.width is even for stright bits only
         Here we made board cuts to avoid chips according to the following rules
         1 - avoid full cuts as mach as possible
-        2 - expanding cuts shell take about quarter of bit width from left side
+        2 - expanding cuts shell take about quarter of bit diameter from left side
         3 - multi-passed corner right cuts
         4 - corner right cut as is (it is most risky cut but we can't optimize it on Incra)
         '''
@@ -647,7 +647,7 @@ class Cut(object):
             if (self.xmin > 0 and (self.xmin - (p - halfwidth)) > self.precision) or \
                (self.xmax < board.width and ((p + halfwidth) - self.xmax) > self.precision):
                 raise Router_Exception(bit.units.transl.tr('cut xmin = %f, xmax = %f, pass = %f: '
-                                                           'Bit width (%f) too large for this cut!')
+                                                           'Bit diam. (%f) too large for this cut!')
                                        % (self.xmin, self.xmax, p, bit.width_f))
 
 
@@ -762,14 +762,25 @@ class Joint_Geometry(object):
         if config.show_fit:
             board_sep = -bit.depth
 
-        # Create the corners of the template
-        self.rect_T = My_Rectangle(margins.left, margins.bottom,
-                                   template.length, template.height)
+        # Create the corners of the template. When the template itself is hidden,
+        # allow the table to grow downward into the existing bottom margin
+        # instead of pushing the rest of the diagram upward.
+        rect_t_height = template.height
+        rect_t_bottom = margins.bottom
+        if not getattr(config, 'show_template', False):
+            desired_height = max(rect_t_height, bit.units.inches_to_increments(0.875))
+            extra_height = max(0, desired_height - rect_t_height)
+            grow_down = min(extra_height, margins.bottom)
+            rect_t_bottom -= grow_down
+            rect_t_height += grow_down
+
+        self.rect_T = My_Rectangle(margins.left, rect_t_bottom,
+                                   template.length, rect_t_height)
 
         # The sub-rectangle in the template of the board's width
         # (no template margins)
         self.board_T = My_Rectangle(self.rect_T.xL() + template.margin, self.rect_T.yB(),
-                                    boards[0].width, template.height)
+                                    boards[0].width, rect_t_height)
         x = self.board_T.xL()
         y = self.rect_T.yT() + margins.sep
 

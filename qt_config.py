@@ -140,6 +140,16 @@ class Config_Window(QtWidgets.QDialog):
         QtWidgets.QDialog.__init__(self, parent)
         self.config = config
         self.new_config = self.config.__dict__.copy()
+        if 'show_template' not in self.new_config:
+            self.new_config['show_template'] = getattr(self.config, 'show_template', False)
+            setattr(self.config, 'show_template', self.new_config['show_template'])
+        if 'tail_board_thickness' not in self.new_config:
+            if self.config.metric:
+                default_tail = 19
+            else:
+                default_tail = '3/4'
+            self.new_config['tail_board_thickness'] = default_tail
+            setattr(self.config, 'tail_board_thickness', default_tail)
         self.line_edit_width = 80
         self.units = units
         self.transl = units.transl
@@ -152,6 +162,8 @@ class Config_Window(QtWidgets.QDialog):
         self.bit = router.Router_Bit(self.units, bit_width, bit_depth, bit_angle, bit_gentle)
         board_width = self.units.abstract_to_increments(self.config.board_width)
         self.board = router.Board(self.bit, width=board_width)
+        self.tail_board_thickness = self.units.abstract_to_increments(
+            self.config.tail_board_thickness)
 
         # Form the tabs and their contents
         title_label = QtWidgets.QLabel(
@@ -273,6 +285,15 @@ class Config_Window(QtWidgets.QDialog):
         grid = form_line(self.le_board_width_label, self.le_board_width, tt)
         vbox.addLayout(grid)
 
+        self.le_tail_thickness_label = QtWidgets.QLabel(
+            self.transl.tr('Initial Tail Board Thickness{}:').format(us))
+        self.le_tail_thickness = QtWidgets.QLineEdit(w)
+        self.le_tail_thickness.setFixedWidth(self.line_edit_width)
+        self.le_tail_thickness.editingFinished.connect(self._on_tail_thickness)
+        tt = self.transl.tr('The initial tail-board thickness when pyRouterJig starts.')
+        grid = form_line(self.le_tail_thickness_label, self.le_tail_thickness, tt)
+        vbox.addLayout(grid)
+
         self.le_db_thick_label = QtWidgets.QLabel(
             self.transl.tr('Initial Double Board Thickness{}:').format(us))
         self.le_db_thick = QtWidgets.QLineEdit(w)
@@ -319,11 +340,11 @@ class Config_Window(QtWidgets.QDialog):
 
         us = self.units.units_string(withParens=True)
         self.le_bit_width_label = QtWidgets.QLabel(
-            self.transl.tr('Initial Bit Width{}:').format(us))
+            self.transl.tr('Initial Bit Diam.{}:').format(us))
         self.le_bit_width = QtWidgets.QLineEdit(w)
         self.le_bit_width.setFixedWidth(self.line_edit_width)
         self.le_bit_width.editingFinished.connect(self._on_bit_width)
-        tt = self.transl.tr('The initial bit width when pyRouterJig starts.')
+        tt = self.transl.tr('The initial bit diam. when pyRouterJig starts.')
         grid = form_line(self.le_bit_width_label, self.le_bit_width, tt)
         vbox.addLayout(grid)
 
@@ -486,6 +507,11 @@ class Config_Window(QtWidgets.QDialog):
         w = QtWidgets.QWidget()
         vbox = QtWidgets.QVBoxLayout()
 
+        self.cb_show_template = QtWidgets.QCheckBox(self.transl.tr('Show Template'), w)
+        self.cb_show_template.stateChanged.connect(self._on_show_template)
+        self.cb_show_template.setToolTip(self.transl.tr('Display the Incra template outline'))
+        vbox.addWidget(self.cb_show_template)
+
         self.cb_show_caul = QtWidgets.QCheckBox(self.transl.tr('Show Caul Template'), w)
         self.cb_show_caul.stateChanged.connect(self._on_show_caul)
         self.cb_show_caul.setToolTip(self.transl.tr('Display the template for clamping cauls'))
@@ -629,6 +655,7 @@ class Config_Window(QtWidgets.QDialog):
         self.le_num_incr.setText(str(self.config.num_increments))
         self.le_wood_images.setText(str(self.config.wood_images))
         self.cb_show_finger_widths.setChecked(self.config.show_finger_widths)
+        self.cb_show_template.setChecked(getattr(self.config, 'show_template', False))
         self.cb_show_caul.setChecked(self.config.show_caul)
         self.cb_show_fit.setChecked(self.config.show_fit)
         self.cb_rpid.setChecked(self.config.show_router_pass_identifiers)
@@ -638,6 +665,7 @@ class Config_Window(QtWidgets.QDialog):
         self.le_min_image.setText(str(self.config.min_image_width))
         self.le_max_image.setText(str(self.config.max_image_width))
         self.le_board_width.setText(str(self.config.board_width))
+        self.le_tail_thickness.setText(str(self.config.tail_board_thickness))
         self.le_db_thick.setText(str(self.config.double_board_thickness))
         self.le_bit_width.setText(str(self.config.bit_width))
         self.le_bit_depth.setText(str(self.config.bit_depth))
@@ -785,7 +813,7 @@ class Config_Window(QtWidgets.QDialog):
     @QtCore.pyqtSlot()
     def _on_bit_width(self):
         '''
-        Handles change in bit width
+        Handles change in bit diameter
         '''
         if self.config.debug:
             print('qt_config:_on_bit_width')
@@ -833,6 +861,21 @@ class Config_Window(QtWidgets.QDialog):
         if val is not None:
             self.new_config['board_width'] = val
             self.update_state('board_width')
+
+    @QtCore.pyqtSlot()
+    def _on_tail_thickness(self):
+        '''
+        Handles change in tail board thickness
+        '''
+        if self.config.debug:
+            print('qt_config:_on_tail_thickness')
+        result = qt_utils.set_units_line_edit(
+            self.le_tail_thickness, self.units, self.tail_board_thickness,
+            self.transl.tr('Tail Board Thickness'))
+        if result is not None:
+            self.tail_board_thickness, val = result
+            self.new_config['tail_board_thickness'] = val
+            self.update_state('tail_board_thickness')
 
     @QtCore.pyqtSlot()
     def _on_db_thick(self):
@@ -891,6 +934,16 @@ class Config_Window(QtWidgets.QDialog):
             print('qt_config:_on_show_finger_widths')
         self.new_config['show_finger_widths'] = self.cb_show_finger_widths.isChecked()
         self.update_state('show_finger_widths')
+
+    @QtCore.pyqtSlot()
+    def _on_show_template(self):
+        '''
+        Handles change in showing the template
+        '''
+        if self.config.debug:
+            print('qt_config:_on_show_template')
+        self.new_config['show_template'] = self.cb_show_template.isChecked()
+        self.update_state('show_template')
 
     @QtCore.pyqtSlot()
     def _on_show_caul(self):

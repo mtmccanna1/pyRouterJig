@@ -103,7 +103,7 @@ class Base_Spacing(object):
         self.labels = []
         self.transl = bit.units.transl
 
-        # compute the increase in effective bit width from the double* boards
+        # compute the increase in effective bit diameter from the double* boards
         self.dhtot = 0
         if boards[2].active:
             self.dhtot += boards[2].dheight
@@ -116,15 +116,15 @@ class Base_Spacing(object):
 
 class Equally_Spaced(Base_Spacing):
     '''
-    Computes cuts that are equally spaced, using (by default) the bit width,
+    Computes cuts that are equally spaced, using (by default) the bit diameter,
     with the first cut centered on the board's edge.
 
     Parameters that control the spacing are:
 
-    spacing: Extra spacing, beyond the bit width added between the cuts
+    spacing: Extra spacing, beyond the bit diameter added between the cuts
              of the board.  Default is 0.
 
-    width: Width of fingers.  Default is the bit width.
+    width: Width of fingers.  Default is the bit diameter.
 
     centered: If true, then a finger is centered on the board width.  Always
     true for dovetail bits.  Default is true.
@@ -134,7 +134,7 @@ class Equally_Spaced(Base_Spacing):
           ' joint for the board and bit parameters'\
           ' specified.  This is likely because'\
           ' the board width is too small for the'\
-          ' bit width specified.'
+          ' bit diam. specified.'
 
     @staticmethod
     def is_board_width_ok(bit, boards, config):
@@ -262,7 +262,7 @@ class Variable_Spaced(Base_Spacing):
         ' joint for the board and bit parameters'\
         ' specified.  This is likely because'\
         ' the board width is too small for the'\
-        ' bit width specified.'
+        ' bit diam. specified.'
 
     @staticmethod
     def is_board_width_ok(bit, boards):

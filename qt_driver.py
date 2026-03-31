@@ -67,6 +67,13 @@ class Driver(QtWidgets.QMainWindow):
         # Read the config file.  We wait until the end of this init to print
         # the status message, because we need the statusbar to be created first.
         (self.config, msg) = self.load_config(app)
+        if not hasattr(self.config, 'show_template'):
+            self.config.show_template = False
+        if not hasattr(self.config, 'tail_board_thickness'):
+            if self.config.metric:
+                self.config.tail_board_thickness = 19
+            else:
+                self.config.tail_board_thickness = '3/4'
 
         # Form the units
         self.units = utils.Units(self.config.english_separator, self.config.metric,
@@ -83,6 +90,7 @@ class Driver(QtWidgets.QMainWindow):
         self.bit = router.Router_Bit(self.units, bit_width, bit_depth, bit_angle, bit_gentle)
         self.boards = []
         board_width = self.units.abstract_to_increments(self.config.board_width)
+        self.tail_board_thickness = self.units.abstract_to_increments(self.config.tail_board_thickness)
         for _ in lrange(4):
             self.boards.append(router.Board(self.bit, width=board_width))
         self.boards[2].set_active(False)
@@ -305,6 +313,12 @@ class Driver(QtWidgets.QMainWindow):
         view_menu.addAction(self.caul_action)
         self.caul_action.setChecked(self.config.show_caul)
 
+        self.template_action = QtWidgets.QAction(self.transl.tr('Template'), self, checkable=True)
+        self.template_action.setStatusTip(self.transl.tr('Toggle template display'))
+        self.template_action.triggered.connect(self._on_template)
+        view_menu.addAction(self.template_action)
+        self.template_action.setChecked(getattr(self.config, 'show_template', False))
+
         self.finger_size_action = QtWidgets.QAction(self.transl.tr('Finger Widths'),
                                                     self, checkable=True)
         self.finger_size_action.setStatusTip(self.transl.tr('Toggle viewing finger sizes'))
@@ -446,6 +460,7 @@ class Driver(QtWidgets.QMainWindow):
         Creates all of the widgets in the main panel
         '''
         self.main_frame = QtWidgets.QWidget()
+        self._apply_ui_theme()
 
         lineEditWidth = 80
         us = self.units.units_string(withParens=True)
@@ -466,8 +481,18 @@ class Driver(QtWidgets.QMainWindow):
         self.le_board_width.editingFinished.connect(self._on_board_width)
         self.le_board_width.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
 
-        # Bit width line edit
-        self.le_bit_width_label = QtWidgets.QLabel(self.transl.tr('Bit Width{}').format(us))
+        # Tail board thickness line edit
+        self.le_tail_thickness_label = QtWidgets.QLabel(
+            self.transl.tr('Tail Board Thickness{}').format(us))
+        self.le_tail_thickness = QtWidgets.QLineEdit(self.main_frame)
+        self.le_tail_thickness.setFixedWidth(lineEditWidth)
+        self.le_tail_thickness.setText(
+            self.units.increments_to_string(self.tail_board_thickness))
+        self.le_tail_thickness.editingFinished.connect(self._on_tail_board_thickness)
+        self.le_tail_thickness.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+
+        # Bit diameter line edit
+        self.le_bit_width_label = QtWidgets.QLabel(self.transl.tr('Bit Diam.{}').format(us))
         self.le_bit_width = QtWidgets.QLineEdit(self.main_frame)
         self.le_bit_width.setFixedWidth(lineEditWidth)
         self.le_bit_width.setText(self.units.increments_to_string(self.bit.width))
@@ -672,6 +697,12 @@ class Driver(QtWidgets.QMainWindow):
         self.le_description.editingFinished.connect(self._on_description)
         self.le_description.setAlignment(QtCore.Qt.AlignHCenter)
 
+        self.bit_height_info_label = QtWidgets.QLabel(self.transl.tr('Bit Height Options: —'),
+                                                      self.main_frame)
+        self.bit_height_info_label.setAlignment(QtCore.Qt.AlignHCenter)
+        self.bit_height_info_label.setWordWrap(True)
+        self.bit_height_info_label.setObjectName('bitHeightInfoLabel')
+
         ######################################################################
         # Layout widgets in the main frame
         ######################################################################
@@ -682,6 +713,7 @@ class Driver(QtWidgets.QMainWindow):
 
         # Add the figure canvas to the top
         vbox.addWidget(self.fig.canvas)
+        vbox.addWidget(self.bit_height_info_label)
 
         # hbox contains all of the control widgets
         # (everything but the canvas)
@@ -690,7 +722,7 @@ class Driver(QtWidgets.QMainWindow):
         # this grid contains all the lower-left input stuff
         grid = QtWidgets.QGridLayout()
 
-        grid.addWidget(qt_utils.create_hline(), 0, 0, 2, 9, QtCore.Qt.AlignTop)
+        grid.addWidget(qt_utils.create_hline(), 0, 0, 2, 11, QtCore.Qt.AlignTop)
         grid.addWidget(qt_utils.create_vline(), 0, 0, 9, 1)
 
         # Add the board width label, board width input line edit,
@@ -699,22 +731,27 @@ class Driver(QtWidgets.QMainWindow):
         grid.addWidget(self.le_board_width, 2, 1)
         grid.addWidget(qt_utils.create_vline(), 0, 2, 9, 1)
 
-        # Add the bit width label and its line edit
-        grid.addWidget(self.le_bit_width_label, 1, 3)
-        grid.addWidget(self.le_bit_width, 2, 3)
+        # Add the tail board thickness label and its line edit
+        grid.addWidget(self.le_tail_thickness_label, 1, 3)
+        grid.addWidget(self.le_tail_thickness, 2, 3)
         grid.addWidget(qt_utils.create_vline(), 0, 4, 9, 1)
 
-        # Add the bit depth label and its line edit
-        grid.addWidget(self.le_bit_depth_label, 1, 5)
-        grid.addWidget(self.le_bit_depth, 2, 5)
+        # Add the bit diameter label and its line edit
+        grid.addWidget(self.le_bit_width_label, 1, 5)
+        grid.addWidget(self.le_bit_width, 2, 5)
         grid.addWidget(qt_utils.create_vline(), 0, 6, 9, 1)
 
-        # Add the bit angle label and its line edit
-        grid.addWidget(self.le_bit_angle_label, 1, 7)
-        grid.addWidget(self.le_bit_angle, 2, 7)
+        # Add the bit depth label and its line edit
+        grid.addWidget(self.le_bit_depth_label, 1, 7)
+        grid.addWidget(self.le_bit_depth, 2, 7)
         grid.addWidget(qt_utils.create_vline(), 0, 8, 9, 1)
 
-        grid.addWidget(qt_utils.create_hline(), 3, 0, 2, 9, QtCore.Qt.AlignTop)
+        # Add the bit angle label and its line edit
+        grid.addWidget(self.le_bit_angle_label, 1, 9)
+        grid.addWidget(self.le_bit_angle, 2, 9)
+        grid.addWidget(qt_utils.create_vline(), 0, 10, 9, 1)
+
+        grid.addWidget(qt_utils.create_hline(), 3, 0, 2, 11, QtCore.Qt.AlignTop)
 
         grid.setRowStretch(2, 10)
 
@@ -734,7 +771,7 @@ class Driver(QtWidgets.QMainWindow):
         grid.addWidget(self.le_boardm[0], 7, 5)
         grid.addWidget(self.le_boardm[1], 7, 7)
 
-        grid.addWidget(qt_utils.create_hline(), 8, 0, 2, 9, QtCore.Qt.AlignTop)
+        grid.addWidget(qt_utils.create_hline(), 8, 0, 2, 11, QtCore.Qt.AlignTop)
 
         hbox.addLayout(grid)
 
@@ -867,6 +904,99 @@ class Driver(QtWidgets.QMainWindow):
         self._on_wood(3)
         self.update_tooltips()
 
+    def _apply_ui_theme(self):
+        '''
+        Apply a lighter, higher-contrast UI theme for the control area.
+        '''
+        self.main_frame.setStyleSheet("""
+            QWidget {
+                background-color: #f4efe6;
+                color: #2f2417;
+            }
+            QLabel {
+                color: #3b2c1d;
+                background: transparent;
+            }
+            QLabel#bitHeightInfoLabel {
+                color: #5a4026;
+                background-color: #efe4d2;
+                border: 1px solid #c9b18a;
+                border-radius: 5px;
+                padding: 6px 10px;
+                margin-top: 4px;
+            }
+            QLineEdit, QComboBox, QTabWidget::pane, QFrame {
+                background-color: #fffaf2;
+                color: #24180d;
+                border: 1px solid #b89b74;
+                border-radius: 4px;
+            }
+            QLineEdit {
+                padding: 4px 6px;
+                selection-background-color: #c98d3a;
+                selection-color: #fffaf2;
+            }
+            QComboBox {
+                padding: 3px 24px 3px 6px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #fffaf2;
+                color: #24180d;
+                selection-background-color: #d7b27a;
+                selection-color: #24180d;
+            }
+            QTabBar::tab {
+                background-color: #e7dac5;
+                color: #3b2c1d;
+                border: 1px solid #b89b74;
+                border-bottom: none;
+                padding: 6px 12px;
+                margin-right: 2px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+            }
+            QTabBar::tab:selected {
+                background-color: #fffaf2;
+                color: #24180d;
+            }
+            QTabBar::tab:!selected {
+                margin-top: 2px;
+            }
+            QPushButton, QToolButton {
+                background-color: #ead8bd;
+                color: #2f2417;
+                border: 1px solid #b0895d;
+                border-radius: 4px;
+                padding: 4px 8px;
+            }
+            QPushButton:hover, QToolButton:hover {
+                background-color: #f0e2cb;
+            }
+            QPushButton:pressed, QToolButton:pressed {
+                background-color: #d7b27a;
+            }
+            QCheckBox {
+                color: #3b2c1d;
+                spacing: 6px;
+                background: transparent;
+            }
+            QSlider::groove:horizontal {
+                background: #d8c2a1;
+                height: 6px;
+                border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: #9b6b30;
+                width: 14px;
+                margin: -5px 0;
+                border-radius: 7px;
+            }
+            QSlider::sub-page:horizontal {
+                background: #c98d3a;
+                border-radius: 3px;
+            }
+        """)
+
     def update_cb_vsfingers(self, vMin, vMax, value):
         '''
         Updates the combobox for Variable spacing Fingers.
@@ -897,6 +1027,8 @@ class Driver(QtWidgets.QMainWindow):
 
         self.le_board_width_label.setToolTip(self.doc.board_width() + disable)
         self.le_board_width.setToolTip(self.doc.board_width() + disable)
+        self.le_tail_thickness_label.setToolTip(self.doc.tail_board_thickness() + disable)
+        self.le_tail_thickness.setToolTip(self.doc.tail_board_thickness() + disable)
         self.le_bit_width_label.setToolTip(self.doc.bit_width() + disable)
         self.le_bit_width.setToolTip(self.doc.bit_width() + disable)
         self.le_bit_depth_label.setToolTip(self.doc.bit_depth() + disable)
@@ -983,6 +1115,16 @@ class Driver(QtWidgets.QMainWindow):
         '''
         Displays a message to the status bar
         '''
+        fig_warning = None
+        if not warning and getattr(self, 'fig', None) is not None:
+            try:
+                fig_warning = self.fig.get_status_warning()
+            except AttributeError:
+                fig_warning = None
+        if fig_warning:
+            msg = fig_warning
+            warning = True
+
         if warning:
             style = 'background-color: red; color: white'
             self.status_message_label.setStyleSheet(style)
@@ -1020,7 +1162,9 @@ class Driver(QtWidgets.QMainWindow):
         self.template = router.Incra_Template(self.units, self.boards)
         self.fig.draw(self.template, self.boards, self.bit, self.spacing, self.woods,
                       self.description)
+        self.bit_height_info_label.setText(self.fig.get_bit_height_options_text())
         self.status_fit()
+        self.status_message(self.status_message_label.text())
 
     def reinit_spacing(self):
         '''
@@ -1049,6 +1193,7 @@ class Driver(QtWidgets.QMainWindow):
         '''
         # enable/disable changing parameters, depending upon spacing algorithm
         les = [self.le_board_width, self.le_board_width_label,
+               self.le_tail_thickness, self.le_tail_thickness_label,
                self.le_bit_width, self.le_bit_width_label,
                self.le_bit_depth, self.le_bit_depth_label,
                self.le_bit_angle, self.le_bit_angle_label]
@@ -1165,7 +1310,7 @@ class Driver(QtWidgets.QMainWindow):
 
     @QtCore.pyqtSlot()
     def _on_bit_width(self):
-        '''Handles changes to bit width'''
+        '''Handles changes to bit diameter'''
         if self.config.debug:
             print('_on_bit_width')
         val = qt_utils.set_router_value(self.le_bit_width, self.bit, 'width',
@@ -1173,7 +1318,7 @@ class Driver(QtWidgets.QMainWindow):
         if val is not None:
             self.reinit_spacing()
             self.draw()
-            self.status_message(self.transl.tr('Changed bit width to ') + val)
+            self.status_message(self.transl.tr('Changed bit diam. to ') + val)
             self.file_saved = False
 
     @QtCore.pyqtSlot()
@@ -1204,6 +1349,20 @@ class Driver(QtWidgets.QMainWindow):
             self.status_message(self.transl.tr('Changed bit angle to ') + val)
             self.file_saved = False
             self.threeDS_enabler()
+
+    @QtCore.pyqtSlot()
+    def _on_tail_board_thickness(self):
+        '''Handles changes to tail board thickness'''
+        if self.config.debug:
+            print('_on_tail_board_thickness')
+        result = qt_utils.set_units_line_edit(
+            self.le_tail_thickness, self.units, self.tail_board_thickness,
+            self.transl.tr('Tail Board Thickness'))
+        if result is not None:
+            self.tail_board_thickness, val = result
+            self.config.tail_board_thickness = val
+            self.status_message(self.transl.tr('Changed tail board thickness to ') + val)
+            self.file_saved = False
 
     @QtCore.pyqtSlot()
     def _on_board_width(self):
@@ -1557,6 +1716,8 @@ class Driver(QtWidgets.QMainWindow):
 
         # ... set line edit parameters
         self.le_board_width.setText(self.units.increments_to_string(self.boards[0].width))
+        self.le_tail_thickness.setText(
+            self.units.increments_to_string(self.tail_board_thickness))
         self.le_bit_width.setText(self.units.increments_to_string(self.bit.width))
         self.le_bit_depth.setText(self.units.increments_to_string(self.bit.depth))
         self.le_bit_angle.setText(str(self.bit.angle))
@@ -1671,12 +1832,14 @@ class Driver(QtWidgets.QMainWindow):
         # Update widgets that may have changed
         actions = [self.finger_size_action,
                    self.caul_action,
+                   self.template_action,
                    self.pass_id_action,
                    self.pass_location_action]
         for a in actions:
             a.blockSignals(True)
         self.finger_size_action.setChecked(self.config.show_finger_widths)
         self.caul_action.setChecked(self.config.show_caul)
+        self.template_action.setChecked(getattr(self.config, 'show_template', False))
         self.fit_action.setChecked(self.config.show_fit)
         self.pass_id_action.setChecked(self.config.show_router_pass_identifiers)
         self.pass_location_action.setChecked(self.config.show_router_pass_locations)
@@ -1984,6 +2147,19 @@ class Driver(QtWidgets.QMainWindow):
             self.status_message(self.transl.tr('Turned on caul template.'))
         else:
             self.status_message(self.transl.tr('Turned off caul template.'))
+        self.file_saved = False
+        self.draw()
+
+    @QtCore.pyqtSlot()
+    def _on_template(self):
+        '''Handles toggling showing Incra template'''
+        self.config.show_template = self.template_action.isChecked()
+        if self.config_window is not None:
+            self.config_window.update_state('show_template')
+        if self.config.show_template:
+            self.status_message(self.transl.tr('Turned on template view.'))
+        else:
+            self.status_message(self.transl.tr('Turned off template view.'))
         self.file_saved = False
         self.draw()
 

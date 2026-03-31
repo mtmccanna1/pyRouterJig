@@ -24,8 +24,9 @@ Contains the Qt functionality for drawing the template and boards.
 from __future__ import print_function
 from __future__ import division
 
-import time
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
+
+import math
 
 from future.utils import lrange
 from PyQt5 import QtCore, QtGui, QtWidgets, QtPrintSupport
@@ -97,6 +98,7 @@ class Qt_Fig(QtWidgets.QWidget):
         self.config = config
         self.colors = {}
         self.woods = {}
+        self.spacing = None
         self.description = ''
         self.fig_width = -1
         self.fig_height = -1
@@ -112,6 +114,15 @@ class Qt_Fig(QtWidgets.QWidget):
                           'boards': 4,
                           'template_labels': 3,
                           'watermark': 4}
+        self.fraction_glyphs = {
+            (1, 2): '\u00BD',
+            (1, 4): '\u00BC',
+            (3, 4): '\u00BE',
+            (1, 8): '\u215B',
+            (3, 8): '\u215C',
+            (5, 8): '\u215D',
+            (7, 8): '\u215E',
+        }
         self.transform = None
         self.base_transform = None
         self.mouse_pos = None
@@ -216,6 +227,522 @@ class Qt_Fig(QtWidgets.QWidget):
                 self.colors[c].setGreen(g)
                 self.colors[c].setBlue(g)
 
+    def _format_inches_sixteenth(self, value):
+        '''
+        Format a measurement rounded to the nearest 1/16" as a display string.
+        '''
+        if value is None:
+            return None
+
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return None
+
+        if not math.isfinite(numeric):
+            return None
+
+        decimal_value = Decimal(str(numeric))
+        scaled = (decimal_value * Decimal('16')).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+        numerator = int(scaled)
+        denominator = 16
+
+        if numerator < 0:
+            return None
+
+        whole = numerator // denominator
+        remainder = numerator % denominator
+
+        if remainder:
+            gcd = math.gcd(remainder, denominator)
+            num = remainder // gcd
+            den = denominator // gcd
+            frac = self.fraction_glyphs.get((num, den))
+            if frac is None:
+                frac = f'{num}\u2044{den}'
+            if whole:
+                text = f'{whole} {frac}'
+            else:
+                text = frac
+        else:
+            text = str(whole)
+
+        if not text:
+            text = '0'
+
+        return text + '\u2033'
+
+    def _bit_height_options(self):
+        '''
+        Calculate the bit height options derived from the bit angle.
+        '''
+        if self.geom is None or getattr(self.geom, 'bit', None) is None:
+            return None
+
+        try:
+            angle = float(self.geom.bit.angle)
+        except (TypeError, ValueError):
+            return None
+
+        if angle <= 0:
+            return None
+
+        tan_value = math.tan(math.radians(angle))
+        if tan_value <= 0:
+            return None
+
+        base_height = 0.03125 / tan_value
+        option_one = self._format_inches_sixteenth(base_height)
+        option_two = self._format_inches_sixteenth(base_height * 2)
+
+        if option_one and option_two:
+            return (option_one, option_two)
+
+        return None
+
+    def _format_decimal_measurement(self, increments, units=None):
+        '''
+        Format a measurement expressed in increments as a decimal string with units.
+        '''
+        if increments is None:
+            return None
+
+        if units is None:
+            if self.geom is None or getattr(self.geom, 'bit', None) is None:
+                return None
+            units = self.geom.bit.units
+
+        try:
+            increments_value = Decimal(increments)
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+        if units.metric:
+            if not units.num_increments:
+                return None
+            value = (increments_value / Decimal(units.num_increments))\
+                .quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            text = format(value, 'f')
+            suffix = units.units_string()
+            return f'{text}{suffix}' if suffix else text
+
+        if not units.increments_per_inch:
+            return None
+
+        value = (increments_value / Decimal(units.increments_per_inch))\
+            .quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)
+        text = format(value, 'f')
+        return text + '\u2033'
+
+    def _collect_pass_positions(self, cuts):
+        '''
+        Gather router pass positions from the provided cuts, ordered right to left.
+        '''
+        positions = []
+        if not cuts:
+            return positions
+
+        for cut in cuts[::-1]:
+            passes = getattr(cut, 'passes', None)
+            if not passes:
+                continue
+            for pos in reversed(passes):
+                try:
+                    positions.append(Decimal(pos))
+                except (InvalidOperation, TypeError, ValueError):
+                    continue
+        return positions
+
+    def _collect_cut_label_positions(self, cuts, board):
+        '''
+        Gather one label position per cut, ordered right to left.
+
+        For each cut, prefer the midpoint pass when it lies on the board.
+        Otherwise, use the first visible pass on the board. This mirrors the
+        labeling logic used by draw_passes() for board overlays.
+        '''
+        positions = []
+        if cuts is None or board is None:
+            return positions
+
+        try:
+            board_left = Decimal('0')
+            board_right = Decimal(board.width)
+        except (InvalidOperation, TypeError, ValueError):
+            return positions
+
+        for cut in cuts[::-1]:
+            passes = getattr(cut, 'passes', None)
+            if not passes:
+                continue
+
+            try:
+                pass_positions = [Decimal(p) for p in passes]
+            except (InvalidOperation, TypeError, ValueError):
+                continue
+
+            mid_index = len(pass_positions) // 2
+            mid_pass = pass_positions[mid_index]
+            chosen = None
+
+            if board_left <= mid_pass <= board_right:
+                chosen = mid_pass
+            else:
+                for pos in reversed(pass_positions):
+                    if board_left <= pos <= board_right:
+                        chosen = pos
+                        break
+
+            if chosen is not None:
+                positions.append(chosen)
+
+        return positions
+
+    def _first_cut_distance_from_right(self, cuts, board):
+        '''
+        Determine the distance from the right edge to the first cut label position.
+        '''
+        if cuts is None or board is None:
+            return None
+
+        positions = self._collect_cut_label_positions(cuts, board)
+        if not positions:
+            return None
+
+        try:
+            width = Decimal(board.width)
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+        return width - positions[0]
+
+    def _spacing_between_stops_values(self):
+        '''
+        Calculate the template stop spacing as 2B - 1B - 1/2".
+        '''
+        if self.geom is None:
+            return (None, None)
+
+        if self._requires_manual_stop_setup():
+            return (self.transl.tr('Manual setup'), None)
+
+        boards = getattr(self.geom, 'boards', None)
+        bit = getattr(self.geom, 'bit', None)
+        if boards is None or bit is None or len(boards) < 2:
+            return (None, None)
+
+        positions = self._collect_cut_label_positions(boards[1].top_cuts, boards[1])
+        if len(positions) < 2:
+            return (None, None)
+
+        try:
+            width = Decimal(boards[1].width)
+            stop_nut_diameter = Decimal(bit.units.inches_to_increments(0.5))
+        except (InvalidOperation, TypeError, ValueError):
+            return (None, None)
+
+        first_stop = width - positions[0]
+        second_stop = width - positions[1]
+        spacing = second_stop - first_stop - stop_nut_diameter
+        if spacing < 0:
+            return (None, None)
+
+        decimal_value = self._format_decimal_measurement(spacing, bit.units)
+        fraction_value = self._format_inches_sixteenth(bit.units.increments_to_inches(spacing))
+
+        return (decimal_value, fraction_value)
+
+    def _requires_manual_stop_setup(self):
+        '''
+        Determine whether stop spacing must be set manually for this configuration.
+        '''
+        if self.geom is None:
+            if self.config.debug:
+                print('manual stop setup: geom is None -> False')
+            return False
+
+        spacing_obj = getattr(self, 'spacing', None)
+        if spacing_obj is None:
+            if self.config.debug:
+                print('manual stop setup: spacing object is None -> True')
+            return True
+
+        spacing_name = spacing_obj.__class__.__name__
+        if spacing_name != 'Equally_Spaced':
+            if self.config.debug:
+                print('manual stop setup: spacing mode is %s -> True' % spacing_name)
+            return True
+
+        boards = getattr(self.geom, 'boards', None)
+        if boards is None or len(boards) < 2:
+            if self.config.debug:
+                print('manual stop setup: boards missing or incomplete -> False')
+            return False
+
+        cuts = getattr(boards[1], 'top_cuts', None)
+        if not cuts:
+            if self.config.debug:
+                print('manual stop setup: B top cuts missing -> False')
+            return False
+
+        if self.config.debug:
+            positions = self._collect_cut_label_positions(cuts, boards[1])
+            display_positions = [float(p) / self.geom.bit.units.increments_per_inch
+                                 for p in positions[:2]]
+            print('manual stop setup: Equal mode supported, first labeled B cuts %s -> False'
+                  % display_positions)
+        return False
+
+    def _manual_stop_setup_note(self):
+        '''
+        Return the manual setup note for unsupported stop-spacing configurations.
+        '''
+        if not self._requires_manual_stop_setup():
+            return None
+
+        return self.transl.tr(
+            'For this configuration, use the diagram to manually set up the required cut '
+            'locations.'
+        )
+
+    def _end_thickness_warning(self):
+        '''
+        Return a best-practice warning when the right-end thickness on board A
+        or board B exceeds the bit diameter by more than 1/8".
+        '''
+        if self.geom is None:
+            return None
+
+        boards = getattr(self.geom, 'boards', None)
+        bit = getattr(self.geom, 'bit', None)
+        if boards is None or bit is None or len(boards) < 2:
+            return None
+
+        try:
+            threshold = Decimal(bit.width) + Decimal(bit.units.inches_to_increments(0.125))
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+        warnings = []
+        board_specs = [
+            ('A', boards[0], getattr(boards[0], 'bottom_cuts', None)),
+            ('B', boards[1], getattr(boards[1], 'top_cuts', None)),
+        ]
+
+        for label, board, cuts in board_specs:
+            if not cuts:
+                continue
+            try:
+                end_thickness = Decimal(board.width) - Decimal(cuts[-1].xmax)
+            except (InvalidOperation, TypeError, ValueError):
+                continue
+            if end_thickness > threshold:
+                end_text = self._format_decimal_measurement(end_thickness, bit.units)
+                warnings.append('%s: %s' % (label, end_text))
+
+        if not warnings:
+            return None
+
+        threshold_text = self._format_decimal_measurement(threshold, bit.units)
+        return self.transl.tr(
+            'Warning: End thickness exceeds the recommended limit ({}) for this bit setup. {}'
+        ).format(threshold_text, ', '.join(warnings))
+
+    def get_status_warning(self):
+        '''
+        Return the current status-bar warning, if any.
+        '''
+        return self._end_thickness_warning()
+
+    def get_bit_height_options_text(self):
+        '''
+        Return the bit height options as a single display string.
+        '''
+        options = self._bit_height_options()
+        if options:
+            options_body = self.transl.tr('{} or {}').format(options[0], options[1])
+        else:
+            options_body = '—'
+        return self.transl.tr('Bit Height Options: {}').format(options_body)
+
+    def _back_fence_setting_increments(self):
+        '''
+        Calculate the Back Fence Setting in raw increments.
+        '''
+        if self.geom is None:
+            return None
+
+        boards = getattr(self.geom, 'boards', None)
+        if boards is None or len(boards) < 2:
+            return None
+
+        distance_a = self._first_cut_distance_from_right(boards[0].bottom_cuts, boards[0])
+        distance_b = self._first_cut_distance_from_right(boards[1].top_cuts, boards[1])
+
+        if distance_a is None or distance_b is None:
+            return None
+
+        return abs(distance_b - distance_a)
+
+    def _back_fence_setting_values(self):
+        '''
+        Calculate the Back Fence Setting values for the results table.
+        '''
+        if self.geom is None:
+            return (None, None)
+
+        boards = getattr(self.geom, 'boards', None)
+        bit = getattr(self.geom, 'bit', None)
+        if boards is None or bit is None:
+            return (None, None)
+
+        if len(boards) < 2:
+            return (None, None)
+
+        difference = self._back_fence_setting_increments()
+        if difference is None:
+            return (None, None)
+
+        decimal_value = self._format_decimal_measurement(difference, bit.units)
+        fraction_value = self._format_inches_sixteenth(bit.units.increments_to_inches(difference))
+
+        return (decimal_value, fraction_value)
+
+    def _template_panel_position_values(self):
+        '''
+        Calculate the template panel position as 5 - F + MIN(1A, 1B).
+        '''
+        if self.geom is None:
+            return (None, None)
+
+        boards = getattr(self.geom, 'boards', None)
+        bit = getattr(self.geom, 'bit', None)
+        if boards is None or bit is None or len(boards) < 2:
+            return (None, None)
+
+        back_fence_setting = self._back_fence_setting_increments()
+        distance_a = self._first_cut_distance_from_right(boards[0].bottom_cuts, boards[0])
+        distance_b = self._first_cut_distance_from_right(boards[1].top_cuts, boards[1])
+
+        if back_fence_setting is None or distance_a is None or distance_b is None:
+            return (None, None)
+
+        try:
+            zero_position = Decimal(bit.units.inches_to_increments(5.0))
+        except (InvalidOperation, TypeError, ValueError):
+            return (None, None)
+
+        lowest_first_cut = min(distance_a, distance_b)
+        panel_position = zero_position - back_fence_setting + lowest_first_cut
+
+        decimal_value = self._format_decimal_measurement(panel_position, bit.units)
+        fraction_value = self._format_inches_sixteenth(
+            bit.units.increments_to_inches(panel_position)
+        )
+
+        return (decimal_value, fraction_value)
+
+    def _rabbet_cut_setting_values(self):
+        '''
+        Calculate the rabbet cut setting.
+        '''
+        if self.geom is None:
+            return (None, None)
+
+        bit = getattr(self.geom, 'bit', None)
+        if bit is None:
+            return (None, None)
+
+        try:
+            angle = float(bit.angle)
+        except (TypeError, ValueError):
+            return (None, None)
+
+        if angle == 0:
+            return (
+                self._format_decimal_measurement(0, bit.units),
+                self._format_inches_sixteenth(0),
+            )
+
+        try:
+            tail_thickness = Decimal(bit.units.abstract_to_increments(
+                self.config.tail_board_thickness, False
+            ))
+            bit_radius = Decimal(bit.width) / Decimal('2')
+            bit_height = Decimal(bit.depth)
+            cosine = math.cos(math.radians(angle))
+        except (AttributeError, InvalidOperation, TypeError, ValueError):
+            return (None, None)
+
+        if math.isclose(cosine, 0.0):
+            return (None, None)
+
+        try:
+            offset = Decimal(str(math.sqrt(
+                (float(bit_height) / cosine) ** 2 - float(bit_height) ** 2
+            )))
+        except (ValueError, OverflowError):
+            return (None, None)
+
+        rabbet_setting = tail_thickness + bit_radius - offset
+
+        decimal_value = self._format_decimal_measurement(rabbet_setting, bit.units)
+        fraction_value = self._format_inches_sixteenth(
+            bit.units.increments_to_inches(rabbet_setting)
+        )
+
+        return (decimal_value, fraction_value)
+
+    def _dovetail_cut_setting_values(self):
+        '''
+        Calculate the dovetail cut setting.
+        '''
+        if self.geom is None:
+            return (None, None)
+
+        bit = getattr(self.geom, 'bit', None)
+        if bit is None:
+            return (None, None)
+
+        try:
+            angle = float(bit.angle)
+            tail_thickness = Decimal(bit.units.abstract_to_increments(
+                self.config.tail_board_thickness, False
+            ))
+            bit_height = Decimal(bit.depth)
+            bit_diameter = Decimal(bit.width)
+            tangent = Decimal(str(math.tan(math.radians(angle))))
+        except (AttributeError, InvalidOperation, TypeError, ValueError):
+            return (None, None)
+
+        slope_offset = bit_height * tangent
+        dovetail_setting = (
+            tail_thickness
+            - (slope_offset - ((bit_diameter - Decimal('2') * slope_offset) / Decimal('2')))
+        )
+
+        decimal_value = self._format_decimal_measurement(dovetail_setting, bit.units)
+        fraction_value = self._format_inches_sixteenth(
+            bit.units.increments_to_inches(dovetail_setting)
+        )
+
+        return (decimal_value, fraction_value)
+
+    def _results_table_values(self, num_rows):
+        '''
+        Build the list of (decimal, fraction) pairs for the results table rows.
+        '''
+        values = [
+            self._back_fence_setting_values(),
+            self._spacing_between_stops_values(),
+            self._template_panel_position_values(),
+            self._rabbet_cut_setting_values(),
+            self._dovetail_cut_setting_values(),
+        ]
+        while len(values) < num_rows:
+            values.append((None, None))
+        return values[:num_rows]
+
     def draw(self, template, boards, bit, spacing, woods, description):
         '''
         Draws the figure
@@ -223,6 +750,7 @@ class Qt_Fig(QtWidgets.QWidget):
         # Generate the new geometry layout
         self.set_fig_dimensions(template, boards)
         self.woods = woods
+        self.spacing = spacing
         self.description = description
         self.geom = router.Joint_Geometry(template, boards, bit, spacing, self.margins,
                                           self.config)
@@ -233,6 +761,7 @@ class Qt_Fig(QtWidgets.QWidget):
         Prints the figure
         '''
         self.woods = woods
+        self.spacing = spacing
         self.description = description
         self.set_colors(self.config.print_color)
 
@@ -343,9 +872,13 @@ class Qt_Fig(QtWidgets.QWidget):
             window_ar = float(window_width) / window_height
             fig_ar = float(self.fig_width) / self.fig_height
             if fig_ar < window_ar:
-                w = utils.my_round(fig_ar * window_height)
+                min_padding = max(20, int(window_height * 0.03))
+                top_padding = min(min_padding, max(0, window_height - 1))
+                scaled_height = max(1.0, float(window_height - top_padding))
+                scale = scaled_height / self.fig_height
+                scaled_width = scale * self.fig_width
+                w = utils.my_round(scaled_width)
                 painter.translate((window_width - w) // 2, window_height)
-                scale = float(window_height) / self.fig_height
             else:
                 h = utils.my_round(window_width / fig_ar)
                 painter.translate(0, (window_height + h) // 2)
@@ -369,7 +902,8 @@ class Qt_Fig(QtWidgets.QWidget):
 
         # draw the objects
         self.draw_boards(painter)
-        self.draw_template(painter)
+        self.draw_router_pass_overlays(painter)
+        self.draw_results_table(painter)
         self.draw_title(painter)
         # self.draw_finger_sizes(painter)
         if self.config.show_finger_widths:
@@ -378,7 +912,7 @@ class Qt_Fig(QtWidgets.QWidget):
         return (window_width, window_height)
 
     def draw_passes(self, painter, blabel, cuts, y1, y2, flags, xMid,
-                    is_template=True):
+                    is_template=True, board=None):
         '''
         Draws and labels the router passes on a template or board.
 
@@ -390,10 +924,12 @@ class Qt_Fig(QtWidgets.QWidget):
         flags: Horizontal alignment for label
         xMid: x-location of board center
         is_template: If true, then a template
+        board: Optional Board geometry used to clamp overlay labels to the
+               actual board extents when drawing overlays.
 
         Returns the pass label if a pass matches xMid, None otherwise
         '''
-        board_T = self.geom.board_T
+        board_geom = board if board is not None else self.geom.board_T
         shift = (0, 0)  # for adjustments of text
         passMid = None  # location of board-center pass (return value)
         font_type = 'template'
@@ -402,9 +938,48 @@ class Qt_Fig(QtWidgets.QWidget):
         # Collect the router pass locations in a single array by looping
         # through each cut and each pass for each cut, right-to-left.
         xp = []
+        pass_meta = []
+        cut_index = 1
         for c in cuts[::-1]:
+            if not c.passes:
+                cut_index += 1
+                continue
+            mid_pass = c.passes[len(c.passes) // 2]
             for p in lrange(len(c.passes) - 1, -1, -1):
                 xp.append(c.passes[p])
+                pass_meta.append({
+                    'cut_index': cut_index,
+                    'is_midpass': c.passes[p] == mid_pass,
+                    'is_labelpass': False,
+                })
+            cut_index += 1
+
+        if not is_template and board is not None:
+            board_left = board_geom.xL()
+            board_right = board_geom.xR()
+            cut_indices = {}
+            for i in lrange(len(xp)):
+                cut_indices.setdefault(pass_meta[i]['cut_index'], []).append(i)
+
+            for indices in cut_indices.values():
+                chosen = None
+                for i in indices:
+                    if pass_meta[i]['is_midpass']:
+                        pass_x = xp[i] + board_geom.xL()
+                        if board_left <= pass_x <= board_right:
+                            chosen = i
+                        break
+                if chosen is None:
+                    for i in indices:
+                        pass_x = xp[i] + board_geom.xL()
+                        if board_left <= pass_x <= board_right:
+                            chosen = i
+                            break
+                if chosen is not None:
+                    pass_meta[chosen]['is_labelpass'] = True
+        else:
+            for meta in pass_meta:
+                meta['is_labelpass'] = meta['is_midpass']
         # Loop through the passes and do the labels
         np = len(xp)
         for i in lrange(np):
@@ -434,26 +1009,42 @@ class Qt_Fig(QtWidgets.QWidget):
                     flagsv |= QtCore.Qt.AlignBottom
                 else:
                     flagsv |= QtCore.Qt.AlignVCenter
-            xpShift = xp[i] + board_T.xL()
+            pass_x = xp[i] + board_geom.xL()
+            xpShift = pass_x
+            if not is_template and board is not None:
+                board_left = board_geom.xL()
+                board_right = board_geom.xR()
+                if pass_x < board_left:
+                    continue
+                elif pass_x > board_right:
+                    continue
             # Draw the text label for this pass
             label = ''
             this_is_midpoint = False
             if is_template or self.config.show_router_pass_identifiers:
-                label = '%d%s' % (i + 1, blabel)
+                if pass_meta[i]['is_labelpass']:
+                    label = '%d%s' % (pass_meta[i]['cut_index'], blabel)
                 if xpShift == xMid:
                     passMid = label
                     this_is_midpoint = True
-            if not is_template and self.config.show_router_pass_locations:
-                if label:
-                    label += ': '
-                loc = self.geom.bit.units.increments_to_string(board_T.xR() - xpShift)
+            if not is_template and self.config.show_router_pass_locations and label:
+                label += ': '
+                loc = self.geom.bit.units.increments_to_string(board_geom.xR() - xpShift)
                 label += loc
+            label_x = pass_x
+            line_x = xpShift
+            if not label:
+                p1 = QtCore.QPointF(line_x, y1)
+                p2 = QtCore.QPointF(line_x, y2)
+                painter.drawLine(p1, p2)
+                continue
+            line_x = label_x
             painter.save()
             if this_is_midpoint and is_template:
                 pen = painter.pen()
                 pen.setColor(self.colors['center_color'])
                 painter.setPen(pen)
-            r = paint_text(painter, label, (xpShift, y1), flagsv, shift, -90)
+            r = paint_text(painter, label, (label_x, y1), flagsv, shift, -90)
             # Determine the line starting point from the size of the text.
             # Create a small margin so that the starting point is not too
             # close to the text.
@@ -468,267 +1059,182 @@ class Qt_Fig(QtWidgets.QWidget):
                     y1text += 0.05 * (y2 - y1text)
             # If there is any room left, draw the line from the label to the base of cut
             if (y1 - y2) * (y1text - y2) > 0:
-                p1 = QtCore.QPointF(xpShift, y1text)
-                p2 = QtCore.QPointF(xpShift, y2)
+                p1 = QtCore.QPointF(line_x, y1text)
+                p2 = QtCore.QPointF(line_x, y2)
                 painter.drawLine(p1, p2)
             painter.restore()
         return passMid
 
-    def draw_alignment(self, painter):
+    def draw_router_pass_overlays(self, painter):
         '''
-        Draws the alignment lines on all templates
+        Draws router pass labels and guides on the boards when enabled.
         '''
-        board_T = self.geom.board_T
-        board_TDD = self.geom.board_TDD
-        board_caul = self.geom.board_caul
+        if not (self.config.show_router_pass_identifiers or
+                self.config.show_router_pass_locations):
+            return
 
-        # draw the alignment lines on both templates
-        x = board_T.xR() + self.geom.bit.width // 2
+        boards = self.geom.boards
+        xMid = self.geom.board_T.xMid()
+        frac_depth = 0.95 * self.geom.bit.depth
+        sep_over_2 = 0.5 * self.geom.margins.sep
 
         pen = QtGui.QPen(QtCore.Qt.SolidLine)
-        pen.setColor(self.colors['template_margin_foreground'])
+        pen.setColor(self.colors['canvas_foreground'])
         pen.setWidthF(0)
-
-        bg_pen = QtGui.QPen(QtCore.Qt.SolidLine)
-        bg_pen.setColor(QtGui.QColor('White'))
-        bg_pen.setWidthF(0)
-
-        self.set_font_size(painter, 'template')
-        label = 'ALIGN'
-        flags = QtCore.Qt.AlignTop | QtCore.Qt.AlignHCenter
-        for b in [board_T, board_TDD, board_caul]:
-            if b is not None:
-                y1 = b.yB()
-                y2 = b.yT()
-                painter.setPen(pen)
-                painter.drawLine(x, y1, x, y2)
-                paint_text(painter, label, (x, (y1 + y2) // 2), flags, (0, 0), -90)
-                painter.setPen(bg_pen)
-                painter.drawLine(QtCore.QPointF(x-0.5, y1+0.5), QtCore.QPointF(x-0.5, y2-0.5))
-                painter.drawLine(QtCore.QPointF(x+0.5, y1+0.5), QtCore.QPointF(x+0.5, y2-0.5))
-
-    def draw_template_rectangle(self, painter, r, b):
-        '''
-        Draws the geometry of a template
-        '''
-        # Fill the entire template as white
-        painter.fillRect(r.xL(), r.yB(), r.width, r.height, QtCore.Qt.white)
-
-        # Fill the template margins with a grayshade
-        brush = QtGui.QBrush(QtGui.QColor(self.colors['template_margin_background']))
-        painter.fillRect(r.xL(), r.yB(), b.xL() - r.xL(), r.height, brush)
-        painter.fillRect(b.xR(), r.yB(), r.xR() - b.xR(), r.height, brush)
-
-        # Draw the template bounding box
-        painter.drawRect(r.xL(), r.yB(), r.width, r.height)
-
-        # Label the template with a watermark
-        if self.description is not None:
-            painter.save()
-            self.set_font_size(painter, 'watermark')
-            painter.setPen(self.colors['watermark_color'])
-            flags = QtCore.Qt.AlignVCenter | QtCore.Qt.AlignHCenter
-            x = r.xL() + r.width // 2
-            y = r.yB() + r.height // 2
-            paint_text(painter, self.description, (x, y), flags)
-            painter.restore()
-
-    def draw_template(self, painter):
-        '''
-        Draws the Incra templates
-        '''
-        rect_T = self.geom.rect_T
-        board_T = self.geom.board_T
-        boards = self.geom.boards
-
-        xMid = board_T.xMid()
-        centerline = []
-        centerline_TDD = []
-
-        pen_canvas = QtGui.QPen(QtCore.Qt.SolidLine)
-        pen_canvas.setColor(self.colors['canvas_foreground'])
-        pen_canvas.setWidthF(0)
-        penA = QtGui.QPen(QtCore.Qt.SolidLine)
-        penA.setColor(self.colors['pass_color'])
-        penA.setWidthF(0)
-        penB = QtGui.QPen(QtCore.Qt.DashLine)
-        penB.setColor(self.colors['pass_alt_color'])
-        penB.setWidthF(0)
-
-        painter.setPen(pen_canvas)
-        self.draw_template_rectangle(painter, rect_T, board_T)
-
-        if boards[3].active:
-            rect_TDD = self.geom.rect_TDD
-            board_TDD = self.geom.board_TDD
-            self.draw_template_rectangle(painter, rect_TDD, board_TDD)
-            rect_top = rect_TDD
-        else:
-            rect_top = rect_T
+        painter.save()
+        painter.setPen(pen)
 
         flagsL = QtCore.Qt.AlignLeft
         flagsR = QtCore.Qt.AlignRight
-        show_passes = self.config.show_router_pass_identifiers |\
-                      self.config.show_router_pass_locations
 
-        frac_depth = 0.95 * self.geom.bit.depth
-        sepOver2 = 0.5 * self.geom.margins.sep
-        # Draw the router passes
-        # ... do the top board passes
-        y1 = boards[0].yB() - sepOver2
-        y2 = boards[0].yB() + frac_depth
-        painter.setPen(penA)
-        pm = self.draw_passes(painter, 'A', boards[0].bottom_cuts, rect_top.yMid(),
-                              rect_top.yT(), flagsR, xMid)
-        if pm is not None:
-            if boards[3].active:
-                centerline_TDD.append(pm)
-            else:
-                centerline.append(pm)
-        if show_passes:
-            painter.setPen(pen_canvas)
+        # Top board passes
+        if boards[0].active:
+            y1 = boards[0].yB() - sep_over_2
+            y2 = boards[0].yB() + frac_depth
             self.draw_passes(painter, 'A', boards[0].bottom_cuts, y1, y2,
-                             flagsL, xMid, False)
-        label_bottom = 'A,B'
-        label_top = None
+                             flagsL, xMid, False, board=boards[0])
+
         i = 0
-        # Do double-double passes
+        # Double-double passes
         if boards[3].active:
-            y1 = boards[3].yT() + sepOver2
+            y1 = boards[3].yT() + sep_over_2
             y2 = boards[3].yT() - frac_depth
-            painter.setPen(penB)
-            pm = self.draw_passes(painter, self.labels[i], boards[3].top_cuts, rect_TDD.yMid(),
-                                  rect_TDD.yT(), flagsR, xMid)
-            if pm is not None:
-                centerline_TDD.append(pm)
-            if show_passes:
-                painter.setPen(pen_canvas)
-                self.draw_passes(painter, self.labels[i], boards[3].top_cuts, y1, y2,
-                                 flagsR, xMid, False)
+            self.draw_passes(painter, self.labels[i], boards[3].top_cuts, y1, y2,
+                             flagsR, xMid, False, board=boards[3])
 
-            y1 = boards[3].yB() - sepOver2
+            y1 = boards[3].yB() - sep_over_2
             y2 = boards[3].yB() + frac_depth
-            painter.setPen(penA)
-            pm = self.draw_passes(painter, self.labels[i + 1], boards[3].bottom_cuts,
-                                  rect_TDD.yMid(), rect_TDD.yB(), flagsL, xMid)
-            if pm is not None:
-                centerline_TDD.append(pm)
-            if show_passes:
-                painter.setPen(pen_canvas)
-                self.draw_passes(painter, self.labels[i + 1], boards[3].bottom_cuts, y1, y2,
-                                 flagsL, xMid, False)
-            label_bottom = 'D,E,F'
-            label_top = 'A,B,C'
+            self.draw_passes(painter, self.labels[i + 1], boards[3].bottom_cuts, y1, y2,
+                             flagsL, xMid, False, board=boards[3])
             i += 2
-        # Do double passes
+
+        # Double passes
         if boards[2].active:
-            y1 = boards[2].yT() + sepOver2
+            y1 = boards[2].yT() + sep_over_2
             y2 = boards[2].yT() - frac_depth
-            if boards[3].active:
-                painter.setPen(penA)
-            else:
-                painter.setPen(penB)
-            pm = self.draw_passes(painter, self.labels[i], boards[2].top_cuts, rect_T.yMid(),
-                                  rect_T.yT(), flagsR, xMid)
-            if pm is not None:
-                centerline.append(pm)
-            if show_passes:
-                painter.setPen(pen_canvas)
-                self.draw_passes(painter, self.labels[i], boards[2].top_cuts, y1, y2,
-                                 flagsR, xMid, False)
-            y1 = boards[2].yB() - sepOver2
+            self.draw_passes(painter, self.labels[i], boards[2].top_cuts, y1, y2,
+                             flagsR, xMid, False, board=boards[2])
+
+            y1 = boards[2].yB() - sep_over_2
             y2 = boards[2].yB() + frac_depth
-            painter.setPen(penA)
-            pm = self.draw_passes(painter, self.labels[i + 1], boards[2].bottom_cuts, rect_T.yMid(),
-                                  rect_T.yB(), flagsL, xMid)
-            if pm is not None:
-                centerline.append(pm)
-            if show_passes:
-                painter.setPen(pen_canvas)
-                self.draw_passes(painter, self.labels[i + 1], boards[2].bottom_cuts, y1, y2,
-                                 flagsL, xMid, False)
-            if not boards[3].active:
-                label_bottom = 'A,B,C,D'
+            self.draw_passes(painter, self.labels[i + 1], boards[2].bottom_cuts, y1, y2,
+                             flagsL, xMid, False, board=boards[2])
             i += 2
 
-        # ... do the bottom board passes
-        y1 = boards[1].yT() + sepOver2
-        y2 = boards[1].yT() - frac_depth
-        if boards[2].active or boards[3].active:
-            painter.setPen(penB)
-        else:
-            painter.setPen(penA)
-        pm = self.draw_passes(painter, self.labels[i], boards[1].top_cuts, rect_T.yMid(),
-                              rect_T.yB(), flagsL, xMid)
-        if pm is not None:
-            centerline.append(pm)
-        if show_passes:
-            painter.setPen(pen_canvas)
+        # Bottom board passes
+        if boards[1].active:
+            y1 = boards[1].yT() + sep_over_2
+            y2 = boards[1].yT() - frac_depth
             self.draw_passes(painter, self.labels[i], boards[1].top_cuts, y1, y2,
-                             flagsR, xMid, False)
+                             flagsR, xMid, False, board=boards[1])
 
-        flagsLC = QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
-        flagsRC = QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
+        painter.restore()
 
-        # ... draw the caul template and do its passes.  Draw events may be
-        # triggered before we have the ability to recreate the geom object,
-        # so we have to ensure the caul_top object actually exists.
-        datetime = time.strftime('\n%d %b %y %H:%M', time.localtime())
-        if self.config.show_caul and self.geom.caul_top is not None:
-            rect_caul = self.geom.rect_caul
-            board_caul = self.geom.board_caul
-            top = self.geom.caul_top
-            bottom = self.geom.caul_bottom
-            self.draw_template_rectangle(painter, rect_caul, board_caul)
-            centerline_caul = []
-            painter.setPen(penA)
-            pm = self.draw_passes(painter, 'A', top, rect_caul.yMid(), rect_caul.yT(), flagsR, xMid)
-            if pm is not None:
-                centerline_caul.append(pm)
-            pm = self.draw_passes(painter, self.labels[i], bottom, rect_caul.yMid(),
-                                  rect_caul.yB(), flagsL, xMid)
-            if pm is not None:
-                centerline_caul.append(pm)
-            self.set_font_size(painter, 'template_labels')
-            label = self.transl.tr('Cauls')
-            if centerline_caul:
-                label += self.transl.tr('\nCenter: ') + centerline_caul[0]
-            else:
-                pen = QtGui.QPen(QtCore.Qt.DashLine)
-                pen.setColor(self.colors['center_color'])
-                pen.setWidthF(0)
-                painter.setPen(pen)
-                painter.drawLine(xMid, rect_caul.yB(), xMid, rect_caul.yT())
-            painter.setPen(self.colors['template_margin_foreground'])
-            paint_text(painter, label + datetime, (rect_caul.xL(), rect_caul.yMid()),
-                       flagsLC, (5, 0))
-            paint_text(painter, label, (rect_caul.xR(), rect_caul.yMid()), flagsRC, (-5, 0))
+    def draw_results_table(self, painter):
+        '''
+        Renders the placeholder for the cut results table in place of the template.
+        '''
+        rect_T = getattr(self.geom, 'rect_T', None)
+        if rect_T is None:
+            return
 
-        # Label the templates
-        pen = QtGui.QPen(QtCore.Qt.DashLine)
-        pen.setColor(self.colors['center_color'])
+        if getattr(self.config, 'show_template', False):
+            # Honor the existing toggle by allowing the table area to be hidden.
+            return
+
+        painter.save()
+        background = QtGui.QColor(self.colors['canvas_background'])
+        painter.fillRect(rect_T.xL(), rect_T.yB(), rect_T.width, rect_T.height, background)
+
+        pen = QtGui.QPen(QtCore.Qt.SolidLine)
+        pen.setColor(self.colors['canvas_foreground'])
         pen.setWidthF(0)
-        self.set_font_size(painter, 'template_labels')
-        if centerline:
-            label_bottom += self.transl.tr('\nCenter: ') + centerline[0]
-        else:
-            painter.setPen(pen)
-            painter.drawLine(xMid, rect_T.yB(), xMid, rect_T.yT())
-        painter.setPen(self.colors['template_margin_foreground'])
-        paint_text(painter, label_bottom + datetime, (rect_T.xL(), rect_T.yMid()), flagsLC, (5, 0))
-        paint_text(painter, label_bottom, (rect_T.xR(), rect_T.yMid()), flagsRC, (-5, 0))
-        if label_top is not None:
-            if centerline_TDD:
-                label_top += self.transl.tr('\nCenter: ') + centerline_TDD[0]
-            else:
-                painter.setPen(pen)
-                painter.drawLine(xMid, rect_TDD.yB(), xMid, rect_TDD.yT())
-            painter.setPen(self.colors['template_margin_foreground'])
-            paint_text(painter, label_top + datetime, (rect_TDD.xL(), rect_TDD.yMid()),
-                       flagsLC, (5, 0))
-            paint_text(painter, label_top, (rect_TDD.xR(), rect_TDD.yMid()), flagsRC, (-5, 0))
+        painter.setPen(pen)
 
-        self.draw_alignment(painter)
+        row_labels = [
+            self.transl.tr('Back Fence Setting'),
+            self.transl.tr('Spacing Between Stops'),
+            self.transl.tr('Template Panel Position'),
+            self.transl.tr('Rabbet Cut Setting'),
+            self.transl.tr('Dovetail Cut Setting'),
+        ]
+        num_rows = len(row_labels)
+        num_cols = 3
+
+        table_values = self._results_table_values(num_rows)
+
+        units = self.geom.bit.units
+        try:
+            target_col_width = units.inches_to_increments(2.25)
+        except Exception:
+            target_col_width = 0
+        desired_table_width = float(target_col_width) * num_cols
+        max_table_width = float(rect_T.width)
+        use_target_width = target_col_width > 0 and desired_table_width <= max_table_width
+        if use_target_width:
+            table_width = desired_table_width
+            col_width = float(target_col_width)
+        else:
+            table_width = max_table_width
+            col_width = table_width / num_cols if num_cols else max_table_width
+
+        table_left = rect_T.xMid() - table_width / 2.0
+        if table_left < rect_T.xL():
+            table_left = rect_T.xL()
+        table_right = table_left + table_width
+        if table_right > rect_T.xR():
+            table_right = rect_T.xR()
+            table_left = table_right - table_width
+
+        row_height = float(rect_T.height) / num_rows if num_rows else rect_T.height
+
+        # Draw the grid
+        for r in range(num_rows + 1):
+            y = rect_T.yB() + r * row_height
+            painter.drawLine(table_left, y, table_right, y)
+        for c in range(num_cols + 1):
+            x = table_left + c * col_width
+            painter.drawLine(x, rect_T.yB(), x, rect_T.yT())
+
+        self.set_font_size(painter, 'template')
+
+        headers = [
+            self.transl.tr('Label'),
+            self.transl.tr('Decimal'),
+            self.transl.tr('Fraction'),
+        ]
+        header_y = rect_T.yT() + max(self.margins.sep * 0.2, 2)
+        for idx, header in enumerate(headers):
+            x = table_left + (idx + 0.5) * col_width
+            paint_text(painter, header, (x, header_y),
+                       QtCore.Qt.AlignHCenter | QtCore.Qt.AlignBottom, (0, -2))
+
+        dash = '—'
+        for idx, label in enumerate(row_labels):
+            y = rect_T.yB() + (idx + 0.5) * row_height
+            paint_text(painter, label, (table_left, y),
+                       QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, (5, 0))
+            decimal_value, fraction_value = dash, dash
+            if idx < len(table_values):
+                decimal_entry, fraction_entry = table_values[idx]
+                if decimal_entry is not None:
+                    decimal_value = decimal_entry
+                if fraction_entry is not None:
+                    fraction_value = fraction_entry
+            paint_text(painter, decimal_value,
+                       (table_left + 1 * col_width + col_width / 2, y),
+                       QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+            paint_text(painter, fraction_value,
+                       (table_left + 2 * col_width + col_width / 2, y),
+                       QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+
+        manual_note = self._manual_stop_setup_note()
+        if manual_note:
+            note_y = rect_T.yB() - max(self.margins.sep * 0.4, 12)
+            paint_text(painter, manual_note, (rect_T.xMid(), note_y),
+                       QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
+
+        painter.restore()
 
     def draw_one_board(self, painter, board, bit, fill_color):
         '''
@@ -920,12 +1426,27 @@ class Qt_Fig(QtWidgets.QWidget):
         Draws the title
         '''
 
+        boards = [b for b in self.geom.boards if b.active]
+        if not boards:
+            return
+
         self.set_font_size(painter, 'title')
         painter.setPen(self.colors['canvas_foreground'])
         title = router.create_title(self.geom.boards, self.geom.bit, self.geom.spacing)
-        flags = QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop
-        p = (self.geom.board_T.xMid(), self.margins.bottom)
-        paint_text(painter, title, p, flags, (0, 5))
+
+        top_y = max(b.yT() for b in boards)
+        top_limit = self.fig_height - self.margins.top
+        headroom = max(0, top_limit - top_y)
+        desired_padding = max(self.margins.sep, 4)
+        baseline_offset = min(headroom, desired_padding)
+        if headroom <= 0:
+            baseline = top_limit
+        else:
+            baseline = top_y + baseline_offset
+
+        flags = QtCore.Qt.AlignHCenter | QtCore.Qt.AlignBottom
+        anchor = (self.geom.board_T.xMid(), baseline)
+        paint_text(painter, title, anchor, flags, (0, -5))
 
     def draw_finger_sizes(self, painter):
         '''

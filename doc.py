@@ -60,7 +60,10 @@ class Doc(object):
         self._board_width = self.transl.tr('<b>Board Width</b> is the board width (in%s) of'
                                            ' the joint.')
 
-        self._bit_width = self.transl.tr('<b>Bit Width</b> is the maximum cutting width (in%s) of'
+        self._tail_board_thickness = self.transl.tr(
+            '<b>Tail Board Thickness</b> is the thickness (in%s) of the tail board.')
+
+        self._bit_width = self.transl.tr('<b>Bit Diam.</b> is the maximum cutting width (in%s) of'
                                          ' the router bit.')
 
         self._bit_depth = self.transl.tr('<b>Bit Depth</b> is the cutting depth (in%s) of the'
@@ -113,6 +116,9 @@ class Doc(object):
 
     def board_width(self):
         return self._board_width % self.sunits
+
+    def tail_board_thickness(self):
+        return self._tail_board_thickness % self.sunits
 
     def bit_width(self):
         return self._bit_width % self.sunits
